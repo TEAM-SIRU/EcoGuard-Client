@@ -327,7 +327,7 @@ export function publicFileUrl(path: string) {
 }
 
 export function getOAuthRedirectUri() {
-  return import.meta.env.VITE_GSM_REDIRECT_URI as string | undefined;
+  return "https://ecoguard-web.https.gsmsv.site";
 }
 
 export function createOAuthAuthorizationRequest(state: string) {
@@ -335,9 +335,10 @@ export function createOAuthAuthorizationRequest(state: string) {
   const redirectUri = getOAuthRedirectUri();
   if (!clientId || !redirectUri) return null;
 
-  const url = new URL(
-    "https://oauth.authorization.datagsm.kr/v1/oauth/authorize",
-  );
+  const authorizationUrl =
+    (import.meta.env.VITE_GSM_AUTHORIZATION_URL as string | undefined) ??
+    "https://oauth.authorization.datagsm.kr/v1/oauth/authorize";
+  const url = new URL(authorizationUrl);
   url.searchParams.set("client_id", clientId);
   url.searchParams.set("redirect_uri", redirectUri);
   url.searchParams.set("response_type", "code");
