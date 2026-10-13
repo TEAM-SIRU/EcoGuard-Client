@@ -1,225 +1,322 @@
-import { useMemo, useState } from 'react'
-import type { ReactNode } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { api, ApiError, createOAuthAuthorizationRequest, hasSession, login, logout, onUnauthorized, publicFileUrl, type Applicant, type Appeal, type Area, type Notice, type NoticeDetail, type Profile, type Recruitment, type ReviewItem, type StudentActivity, type StudentMonth } from './api'
 import './App.css'
 
-type Screen = '오늘 현황' | '인증 접수' | '이의신청' | '청소구역' | '학생 · 활동 기록' | '공지 관리' | '운영 설정'
-type Appeal = { name: string; zone: string; date: string; response: string; result: '승인' | '반려' }
-type Review = { id: number; name: string; zone: string; time: string; result: '대기' | '승인' | '반려'; note: string }
-
-const navItems: { label: Screen; icon: ReactNode; badge?: string }[] = [
-  { label: '오늘 현황', icon: <HomeIcon /> },
-  { label: '인증 접수', icon: <CheckIcon />, badge: '3' },
-  { label: '이의신청', icon: <MessageIcon />, badge: '1' },
-  { label: '청소구역', icon: <GridIcon /> },
-  { label: '학생 · 활동 기록', icon: <PeopleIcon /> },
-  { label: '공지 관리', icon: <BellIcon /> },
-  { label: '운영 설정', icon: <SettingsIcon /> },
+type Page = 'today' | 'review' | 'appeals' | 'recruitment' | 'zones' | 'activity' | 'notices'
+const navigation: { id: Page; icon: string; label: string }[] = [
+  { id: 'today', icon: '⌂', label: '오늘 현황' }, { id: 'review', icon: '▣', label: '인증 검수' },
+  { id: 'appeals', icon: '↗', label: '이의신청' }, { id: 'zones', icon: '⌖', label: '청소구역' },
+  { id: 'activity', icon: '▤', label: '학생 · 활동 기록' }, { id: 'notices', icon: '▧', label: '공지 관리' },
+  { id: 'recruitment', icon: '♧', label: '모집 관리' },
 ]
+const pageTitles: Record<Page, string> = { today: '오늘 현황', review: '인증 검수', appeals: '이의신청', recruitment: '모집 관리', zones: '청소구역 관리', activity: '학생 · 활동 기록', notices: '공지 관리' }
+const EMPTY_REVIEWS: ReviewItem[] = []
+const EMPTY_APPEALS: Appeal[] = []
+const EMPTY_RECRUITMENTS: Recruitment[] = []
+const EMPTY_AREAS: Area[] = []
+const EMPTY_STUDENTS: StudentActivity[] = []
+const EMPTY_NOTICES: Notice[] = []
+const pageSubtitles: Record<Page, string> = { today: '서버에 저장된 운영 현황을 확인해요.', review: 'AI가 판단하기 어려워 넘어온 사진이에요. 확인하면 학생 앱에 바로 결과가 보여요.', appeals: '학생이 제출한 이의신청을 확인하고 처리해요.', recruitment: '선착순 신청 현황과 모집 기간을 관리해요.', zones: '도면에서 청소구역을 활성화하고 담당 학생을 배정해요.', activity: '승인된 인증 1회당 10분을 활동 시간에 쌓아요. 행을 누르면 학생 상세로 가요.', notices: '학생 앱에 게시되는 공지를 관리해요.' }
 
-const completeAppeals: Appeal[] = [
-  { name: '오태훈', zone: '본관 2층 화장실', date: '9월 25일', response: '세면대까지 잘 보여요. 승인할게요.', result: '승인' },
-  { name: '정하은', zone: '본관 2층 화장실', date: '9월 23일', response: '청소 전 사진으로 보여요. 내일 다시 찍어 주세요.', result: '반려' },
-  { name: '김서연', zone: '본관 2층 복도 A', date: '9월 18일', response: '확인했어요. 수고했어요.', result: '승인' },
-  { name: '한지우', zone: '본관 1층 복도 B', date: '9월 16일', response: '다른 층 사진으로 보여요. 해당 구역을 확인해 주세요.', result: '반려' },
-]
-const initialPendingAppeals: Appeal[] = [
-  { name: '박도윤', zone: '본관 3층 복도', date: '9월 26일', response: '담당 선생님이 확인하고 있어요.', result: '승인' },
-]
+export default function App() {
+  const designPreview = import.meta.env.DEV && new URLSearchParams(window.location.search).has('admin-preview')
+  const [authenticated, setAuthenticated] = useState(hasSession() || designPreview)
+  const [profile, setProfile] = useState<Profile | null>(designPreview ? { userId: 0, name: '담당 선생님', role: 'TEACHER', studentNumber: null, grade: null, classNo: null } : null)
+  const [page, setPage] = useState<Page>('today')
+  const [reloadKey, setReloadKey] = useState(0)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [data, setData] = useState<Record<string, unknown>>({})
+  const [selectedReview, setSelectedReview] = useState<number | null>(null)
+  const [selectedAppeal, setSelectedAppeal] = useState<number | null>(null)
+  const [selectedRecruitment, setSelectedRecruitment] = useState<number | null>(null)
+  const [applicants, setApplicants] = useState<Applicant[]>([])
+  const [keyword, setKeyword] = useState('')
+  const [sort, setSort] = useState('이름순')
+  const [selectedStudent, setSelectedStudent] = useState<StudentActivity | null>(null)
+  const [studentMonth, setStudentMonth] = useState<StudentMonth | null>(null)
+  const [month, setMonth] = useState(() => new Date())
+  const [selectedNotice, setSelectedNotice] = useState<number | null>(null)
+  const [noticeDetail, setNoticeDetail] = useState<NoticeDetail | null>(null)
+  const [modal, setModal] = useState<'recruit' | 'assign' | 'notice' | null>(null)
+  const [editingRecruitment, setEditingRecruitment] = useState<Recruitment | null>(null)
 
-const initialReviews: Review[] = [
-  { id: 1, name: '김민준', zone: '본관 2층 복도 A', time: '오늘 07:42', result: '대기', note: '바닥과 복도 창틀을 청소했어요.' },
-  { id: 2, name: '이서윤', zone: '본관 1층 화장실', time: '오늘 07:38', result: '대기', note: '세면대와 거울을 닦았어요.' },
-  { id: 3, name: '박지호', zone: '별관 3층 교실 앞', time: '오늘 07:31', result: '대기', note: '복도를 쓸고 쓰레기를 정리했어요.' },
-  { id: 4, name: '최하은', zone: '본관 2층 화장실', time: '오늘 07:26', result: '승인', note: '휴지통을 비우고 바닥을 닦았어요.' },
-]
+  const run = useCallback(async <T,>(key: string, fn: () => Promise<T>) => {
+    try { const result = await fn(); setData((current) => ({ ...current, [key]: result })); return result }
+    catch (e) { if (e instanceof ApiError && e.code === 'NO_SEARCH_RESULT') { setData((current) => ({ ...current, [key]: [] })); return [] as T } setError(errorMessage(e)); return null }
+  }, [])
+  const reload = useCallback(() => setReloadKey((n) => n + 1), [])
 
-const areaNames = ['본관 1층 복도 A', '본관 1층 복도 B', '본관 2층 화장실', '본관 2층 복도 A', '본관 2층 복도 B', '본관 3층 교실 앞', '별관 1층 복도', '별관 2층 화장실', '도서관', '급식실', '운동장', '과학실']
-const activities = [
-  ['김민준', '2학년 1반 3번', '본관 2층 복도 A', '오늘 07:42', '승인'],
-  ['이서윤', '1학년 3반 8번', '본관 1층 화장실', '오늘 07:38', '대기'],
-  ['박지호', '3학년 2반 11번', '별관 3층 교실 앞', '오늘 07:31', '대기'],
-  ['최하은', '2학년 2반 17번', '본관 2층 화장실', '오늘 07:26', '승인'],
-  ['오태훈', '1학년 1반 5번', '도서관', '어제 07:49', '승인'],
-]
+  useEffect(() => designPreview ? undefined : onUnauthorized(() => { setAuthenticated(false); setProfile(null); setError('로그인이 만료됐어요. 다시 로그인해 주세요.') }), [designPreview])
+  useEffect(() => {
+    if (!authenticated || designPreview) return
+    let cancelled = false
+    api.me().then((me) => { if (cancelled) return; setProfile(me); if (me.role !== 'TEACHER') setError('교사 계정으로 로그인해 주세요.') })
+      .catch((e) => { if (!cancelled) { setError(errorMessage(e)); if (e instanceof ApiError && e.status === 401) setAuthenticated(false) } })
+    return () => { cancelled = true }
+  }, [authenticated, designPreview])
+  useEffect(() => {
+    if (!authenticated || profile?.role !== 'TEACHER' || designPreview) return
+    if (page === 'today') {
+      let cancelled = false
+      Promise.all([api.reviews(), api.appeals(), api.recruitments(), api.areas()])
+        .then(([nextReviews, nextAppeals, nextRecruitments, nextAreas]) => { if (!cancelled) setData((current) => ({ ...current, reviews: nextReviews, appeals: nextAppeals, recruitments: nextRecruitments, areas: nextAreas })) })
+        .catch((e) => { if (!cancelled) setError(errorMessage(e)) })
+        .finally(() => { if (!cancelled) setLoading(false) })
+      return () => { cancelled = true }
+    }
+    if (page === 'review') void Promise.resolve().then(() => run('reviews', api.reviews))
+    if (page === 'appeals') void Promise.resolve().then(() => run('appeals', () => api.appeals()))
+    if (page === 'recruitment') void Promise.resolve().then(() => run('recruitments', api.recruitments))
+    if (page === 'zones') void Promise.resolve().then(() => run('areas', api.areas))
+    if (page === 'activity') void Promise.resolve().then(() => run('students', () => api.searchStudents(keyword)))
+    if (page === 'notices') void Promise.resolve().then(() => run('notices', api.notices))
+  }, [authenticated, profile, page, reloadKey, keyword, run, designPreview])
 
-function App() {
-  const [screen, setScreen] = useState<Screen>('이의신청')
-  const [loggedIn, setLoggedIn] = useState(true)
-  const [appealTab, setAppealTab] = useState<'pending' | 'completed'>('completed')
-  const [pendingAppeals, setPendingAppeals] = useState(initialPendingAppeals)
-  const [resolvedAppeals, setResolvedAppeals] = useState(completeAppeals)
-  const [mobileMenu, setMobileMenu] = useState(false)
-  const [selectedAppeal, setSelectedAppeal] = useState<Appeal | null>(null)
-  const [reviews, setReviews] = useState(initialReviews)
-  const [selectedReview, setSelectedReview] = useState<Review | null>(null)
-  const [areaTab, setAreaTab] = useState<'areas' | 'schedule'>('areas')
-  const [selectedArea, setSelectedArea] = useState(areaNames[2])
-  const [search, setSearch] = useState('')
-  const [noticeOpen, setNoticeOpen] = useState(false)
-  const [notices, setNotices] = useState([
-    { title: '2학기 청소구역이 변경되었어요', date: '2026. 09. 01', body: '새 학기 청소구역을 확인하고 담당 학생들과 함께 확인해 주세요.' },
-    { title: '청소 인증 사진을 올려 주세요', date: '2026. 08. 24', body: '청소를 마친 뒤 지정된 구역이 잘 보이도록 사진을 촬영해 주세요.' },
-    { title: '추석 연휴 청소 일정 안내', date: '2026. 08. 18', body: '연휴 기간에는 청소 인증을 제출하지 않아도 됩니다.' },
-  ])
-  const [toast, setToast] = useState('')
+  const reviews = (data.reviews as ReviewItem[] | undefined) ?? EMPTY_REVIEWS
+  const appeals = (data.appeals as Appeal[] | undefined) ?? EMPTY_APPEALS
+  const recruitments = (data.recruitments as Recruitment[] | undefined) ?? EMPTY_RECRUITMENTS
+  const areas = (data.areas as Area[] | undefined) ?? EMPTY_AREAS
+  const students = (data.students as StudentActivity[] | undefined) ?? EMPTY_STUDENTS
+  const notices = (data.notices as Notice[] | undefined) ?? EMPTY_NOTICES
+  const activeReviewId = reviews.some((item) => item.verificationId === selectedReview) ? selectedReview : reviews[0]?.verificationId ?? null
+  const activeAppealId = appeals.some((item) => item.appealId === selectedAppeal) ? selectedAppeal : appeals[0]?.appealId ?? null
+  const activeNoticeId = notices.some((item) => item.noticeId === selectedNotice) ? selectedNotice : notices[0]?.noticeId ?? null
+  useEffect(() => {
+    if (!activeNoticeId || page !== 'notices') return
+    let cancelled = false
+    api.notice(activeNoticeId).then((detail) => { if (!cancelled) setNoticeDetail(detail) }).catch((e) => { if (!cancelled) setError(errorMessage(e)) })
+    return () => { cancelled = true }
+  }, [activeNoticeId, page, reloadKey])
 
-  const visibleActivities = useMemo(() => activities.filter((row) => row.join(' ').includes(search.trim())), [search])
-  function announce(message: string) { setToast(message); window.setTimeout(() => setToast(''), 2400) }
-  function review(id: number, result: '승인' | '반려') {
-    setReviews((current) => current.map((item) => item.id === id ? { ...item, result } : item))
-    setSelectedReview(null)
-    announce(`인증을 ${result}했어요.`)
+  const handleLogin = useCallback(async (authCode: string, redirectUri: string) => {
+    setLoading(true); setError('')
+    try {
+      const result = await login(authCode, redirectUri)
+      if (result.role !== 'TEACHER') { await logout(); throw new Error('교사 계정으로 로그인해 주세요.') }
+      setAuthenticated(true)
+    } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) }
+  }, [])
+  async function handleLogout() { await logout(); setAuthenticated(false); setProfile(null); setData({}); setError('') }
+  async function openApplicants(item: Recruitment) {
+    setSelectedRecruitment(item.recruitmentId); setLoading(true); setError('')
+    try { setApplicants(await api.applicants(item.recruitmentId)) } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) }
+  }
+  async function openStudent(student: StudentActivity) {
+    setSelectedStudent(student); setLoading(true); setError('')
+    try { setStudentMonth(await api.studentMonth(student.studentId, month.getFullYear(), month.getMonth() + 1)) }
+    catch (e) { setStudentMonth(null); setError(errorMessage(e)) } finally { setLoading(false) }
+  }
+  async function changeMonth(value: Date) {
+    setMonth(value)
+    if (!selectedStudent) return
+    setLoading(true)
+    try { setStudentMonth(await api.studentMonth(selectedStudent.studentId, value.getFullYear(), value.getMonth() + 1)) }
+    catch (e) { setError(errorMessage(e)) } finally { setLoading(false) }
+  }
+  async function saveRecruitment(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); const form = new FormData(event.currentTarget)
+    const semester = String(form.get('semester')); const grade = Number(form.get('grade')); const classNo = Number(form.get('classNo')); const maxCount = Number(form.get('maxCount'))
+    const startDate = `${form.get('startDate')}T00:00:00`; const endDate = `${form.get('endDate')}T23:59:59`
+    setLoading(true); setError('')
+    try {
+      if (editingRecruitment) await api.updateRecruitment(editingRecruitment.recruitmentId, { maxCount, startDate, endDate })
+      else await api.createRecruitment({ semester, grade, classNo, maxCount, startDate, endDate })
+      setModal(null); setEditingRecruitment(null); reload()
+    } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) }
+  }
+  async function toggleArea(area: Area) {
+    setLoading(true); setError('')
+    try { await api.updateArea(area.areaId, !area.isActive); reload() } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) }
+  }
+  async function assignStudents(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); const form = new FormData(event.currentTarget); const areaId = Number(form.get('areaId'))
+    const ids = form.getAll('studentId').map(Number).filter(Number.isFinite)
+    if (!ids.length) { setError('배정할 학생을 선택해 주세요.'); return }
+    setLoading(true); setError('')
+    try { await api.assignStudents(areaId, ids); setModal(null); reload() } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) }
+  }
+  async function saveNotice(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault(); const form = new FormData(event.currentTarget); const title = String(form.get('title') ?? '').trim(); const content = String(form.get('content') ?? '').trim()
+    if (!title || !content) { setError('제목과 내용을 입력해 주세요.'); return }
+    setLoading(true); setError('')
+    try { await api.createNotice(title, content); setModal(null); reload() } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) }
   }
 
-  if (!loggedIn) return <LoginPage onLogin={() => { setLoggedIn(true); setScreen('오늘 현황') }} />
+  if (!authenticated) return <Login onLogin={handleLogin} loading={loading} error={error} />
+  if (profile?.role === 'STUDENT') return <div className="auth-message"><b>교사 계정이 필요해요</b><p>이 화면은 교사용 관리 페이지입니다.</p><button className="button secondary" onClick={() => void handleLogout()}>로그아웃</button></div>
+  if (!profile) return <div className="auth-message">계정 정보를 불러오는 중…</div>
 
-  return <div className="web-app">
-    {mobileMenu && <button className="mobile-menu-backdrop" aria-label="메뉴 닫기" onClick={() => setMobileMenu(false)} />}
-    <aside className={`sidebar ${mobileMenu ? 'mobile-open' : ''}`}>
-      <a className="brand" href="#home" onClick={(event) => event.preventDefault()}><span className="brand-mark"><LeafIcon /></span><span className="brand-copy"><strong>환경지킴이</strong><small>교사 관리</small></span></a>
-      <nav className="side-nav" aria-label="주 메뉴">{navItems.map((item) => <button key={item.label} type="button" className={`nav-item ${screen === item.label ? 'active' : ''}`} onClick={() => { setScreen(item.label); setMobileMenu(false) }}><span className="nav-icon">{item.icon}</span><span className="nav-label">{item.label}</span>{item.badge && <span className="nav-badge">{item.badge}</span>}</button>)}</nav>
-      <div className="sidebar-bottom"><div className="clean-time"><span className="time-icon"><ClockIcon /></span><div><small>오늘 청소 시간</small><strong>07:25 - 08:20</strong></div></div><div className="profile"><span className="profile-avatar">황</span><span className="profile-copy"><small>담당 선생님</small><strong>황아미 선생님</strong></span><button className="logout" type="button" onClick={() => setLoggedIn(false)}>로그아웃</button></div></div>
-    </aside>
-
-    <main className="main-content">
-      <div className="mobile-brand"><span className="brand-mark"><LeafIcon /></span><strong>환경지킴이</strong><button aria-label="메뉴" aria-expanded={mobileMenu} onClick={() => setMobileMenu(true)}>☰</button></div>
-      <section className="page-content">
-        {screen === '오늘 현황' && <Dashboard onNavigate={setScreen} pending={reviews.filter((row) => row.result === '대기').length} appealCount={pendingAppeals.length} />}
-        {screen === '인증 접수' && <ReviewPage reviews={reviews} onSelect={setSelectedReview} />}
-        {screen === '이의신청' && <AppealPage tab={appealTab} setTab={setAppealTab} pending={pendingAppeals} completed={resolvedAppeals} onSelect={setSelectedAppeal} />}
-        {screen === '청소구역' && <AreaPage tab={areaTab} setTab={setAreaTab} area={selectedArea} setArea={setSelectedArea} onToast={announce} />}
-        {screen === '학생 · 활동 기록' && <ActivityPage search={search} setSearch={setSearch} rows={visibleActivities} onToast={announce} />}
-        {screen === '공지 관리' && <NoticePage notices={notices} onNew={() => setNoticeOpen(true)} />}
-        {screen === '운영 설정' && <SettingsPage onToast={announce} />}
-      </section>
-    </main>
-
-    {selectedReview && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedReview(null) }}><section className="review-modal" role="dialog" aria-modal="true" aria-labelledby="review-title"><button className="modal-close" onClick={() => setSelectedReview(null)} aria-label="닫기">×</button><span className="overline">인증 사진 검수</span><h2 id="review-title">{selectedReview.name} · {selectedReview.zone}</h2><div className="photo-preview"><span>청소 인증 사진</span><small>{selectedReview.time}</small></div><p>{selectedReview.note}</p><div className="modal-actions"><button className="button secondary" onClick={() => review(selectedReview.id, '반려')}>반려</button><button className="button primary" onClick={() => review(selectedReview.id, '승인')}>승인하기</button></div></section></div>}
-    {selectedAppeal && <AppealModal appeal={selectedAppeal} onClose={() => setSelectedAppeal(null)} onResolve={(result) => { setPendingAppeals((current) => current.filter((item) => item !== selectedAppeal)); setResolvedAppeals((current) => [{ ...selectedAppeal, result, response: result === '승인' ? '재확인 후 승인 처리했어요.' : '확인 결과 반려를 유지했어요.' }, ...current]); setSelectedAppeal(null); setAppealTab('completed'); announce(`이의신청을 ${result} 처리했어요.`) }} />}
-    {noticeOpen && <NoticeModal onClose={() => setNoticeOpen(false)} onSave={(title, body) => { setNotices((current) => [{ title, body, date: new Intl.DateTimeFormat('ko-KR').format(new Date()) }, ...current]); setNoticeOpen(false); announce('새 공지를 등록했어요.') }} />}
-    {toast && <div className="toast" role="status">✓ {toast}</div>}
+  const title = pageTitles[page]
+  return <div className="app-shell">
+    <aside className="sidebar"><div className="brand">환경지킴이<small>교사 관리</small></div><div className="nav-group">{navigation.map((item) => <button key={item.id} className={`nav-item ${page === item.id ? 'selected' : ''}`} onClick={() => { setPage(item.id); if (item.id === 'recruitment') setSelectedRecruitment(null); setSelectedStudent(null); setError('') }}><span className="nav-icon">{item.icon}</span>{item.label}{item.id === 'review' && reviews.length > 0 && <b className="nav-count">{reviews.length}</b>}{item.id === 'appeals' && appeals.length > 0 && <b className="nav-count">{appeals.length}</b>}</button>)}</div><div className="sidebar-bottom"><div className="avatar">{profile.name.slice(0, 1)}</div><div>{profile.name} 선생님<small>교사 계정</small></div><button className="icon-btn" title="로그아웃" onClick={() => void handleLogout()}>↪</button></div></aside>
+    <main className="main-area"><div className="page-content"><div className={`page-title-row ${page === 'today' ? 'dashboard-page-title' : ''}`}><div>{page === 'today' && <span className="date-label">{new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short' })}</span>}<h1>{selectedStudent && page === 'activity' ? `${selectedStudent.name} 활동 기록` : page === 'recruitment' && selectedRecruitment !== null ? '모집 신청자 관리' : title}</h1>{page !== 'today' && <p className="page-subtitle">{selectedStudent && page === 'activity' ? `${selectedStudent.studentNumber ?? ''} · 승인 인증을 기준으로 활동 시간을 확인해요.` : pageSubtitles[page]}</p>}</div>{page === 'recruitment' && selectedRecruitment === null && <button className="button primary" onClick={() => { setEditingRecruitment(null); setModal('recruit') }}>＋ 새 모집 공고</button>}{page === 'notices' && <button className="button primary" onClick={() => setModal('notice')}>＋ 새 공지</button>}{page === 'activity' && <div className="page-header-actions"><input aria-label="월 선택" type="month" value={`${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`} onChange={(e) => void changeMonth(new Date(`${e.target.value}-01T12:00:00`))} /><button className="button secondary" onClick={() => exportStudentsCsv(students)}>엑셀로 내보내기</button></div>}</div>
+      {error && <div className="inline-alert"><span>ⓘ</span>{error}<button onClick={() => setError('')}>×</button></div>}{loading && <div className="loading-line">서버에서 최신 정보를 불러오는 중…</div>}
+      {page === 'today' && <Dashboard reviews={reviews} appeals={appeals} recruitments={recruitments} areas={areas} onNavigate={setPage} onRefresh={() => { reload(); void run('reviews', api.reviews); void run('appeals', () => api.appeals()); void run('recruitments', api.recruitments); void run('areas', api.areas) }} />}
+      {page === 'review' && <Review items={reviews} selectedId={activeReviewId} onSelect={setSelectedReview} onDecide={async (item, decision, reason) => { setLoading(true); setError(''); try { await api.decideReview(item.verificationId, decision, reason); reload() } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) } }} />}
+      {page === 'appeals' && <Appeals items={appeals} selectedId={activeAppealId} onSelect={setSelectedAppeal} onDecide={async (item, decision, reply) => { setLoading(true); setError(''); try { await api.decideAppeal(item.appealId, decision, reply, decision === 'APPROVED' ? '이의신청이 승인되었어요' : '이의신청 검토 결과'); reload() } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) } }} />}
+      {page === 'recruitment' && (selectedRecruitment !== null ? <Applicants id={selectedRecruitment} items={applicants} onBack={() => setSelectedRecruitment(null)} /> : <Recruitment items={recruitments} onApplicants={openApplicants} onEdit={(item) => { setEditingRecruitment(item); setModal('recruit') }} />)}
+      {page === 'zones' && <Zones areas={areas} onToggle={toggleArea} onAssign={(area) => { setData((current) => ({ ...current, assignmentArea: area })); setModal('assign') }} onRemove={async (area, student, reason) => { setLoading(true); setError(''); try { await api.removeAssignment(area.areaId, student.studentId, reason); reload() } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) } }} />}
+      {page === 'activity' && (selectedStudent ? <StudentDetail student={selectedStudent} month={studentMonth} selectedMonth={month} onBack={() => { setSelectedStudent(null); setStudentMonth(null) }} /> : <Activity students={students} keyword={keyword} onSearch={setKeyword} sort={sort} onSort={setSort} onSelect={(student) => void openStudent(student)} />)}
+      {page === 'notices' && <Notices items={notices} detail={noticeDetail?.noticeId === activeNoticeId ? noticeDetail : null} selectedId={activeNoticeId} onSelect={setSelectedNotice} onSave={async (detail) => { setLoading(true); setError(''); try { await api.updateNotice(detail.noticeId, detail.title, detail.content); reload() } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) } }} onDelete={async (id) => { setLoading(true); setError(''); try { await api.deleteNotice(id); setSelectedNotice(null); reload() } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) } }} />}
+    </div></main>
+    {modal && <Modal title={modal === 'recruit' ? (editingRecruitment ? '모집 공고 수정' : '모집 공고 등록') : modal === 'assign' ? '학생 배정' : '새 공지'} onClose={() => setModal(null)}>{modal === 'recruit' ? <RecruitmentForm initial={editingRecruitment} onSubmit={saveRecruitment} /> : modal === 'assign' ? <AssignmentForm areas={areas} selectedArea={data.assignmentArea as Area | undefined} onSubmit={assignStudents} /> : <form onSubmit={saveNotice}><label>제목<input name="title" required /></label><label>내용<textarea name="content" rows={7} required /></label><div className="modal-actions"><button className="button secondary" type="button" onClick={() => setModal(null)}>취소</button><button className="button primary" disabled={loading}>저장하고 올리기</button></div></form>}</Modal>}
   </div>
 }
 
-function PageHeading({ title, description, action }: { title: string; description: string; action?: ReactNode }) {
-  return <header className="page-heading"><div><h1>{title}</h1><p>{description}</p></div>{action}</header>
-}
-
-function LoginPage({ onLogin }: { onLogin: () => void }) {
-  const [code, setCode] = useState('')
-  return <main className="login-preview"><form className="login-preview-card" onSubmit={(event) => { event.preventDefault(); if (code.trim()) onLogin() }}><a className="brand" href="#home" onClick={(event) => event.preventDefault()}><span className="brand-mark"><LeafIcon /></span><span className="brand-copy"><strong>환경지킴이</strong><small>우리 학교를 깨끗하게</small></span></a><span className="overline">TEACHER SIGN IN</span><h1>환경지킴이 로그인</h1><p>DataGSM에서 받은 인증 코드로 로그인해 주세요.</p><label>인증 코드<input value={code} onChange={(event) => setCode(event.target.value)} placeholder="인증 코드 입력" autoComplete="off" /></label><button className="button primary full" disabled={!code.trim()}>로그인</button><small className="preview-note">화면 미리보기입니다. 실제 인증은 서버 연결 후 사용할 수 있어요.</small></form></main>
-}
-
-function Dashboard({ onNavigate, pending, appealCount }: { onNavigate: (screen: Screen) => void; pending: number; appealCount: number }) {
-  return <><PageHeading title="오늘 현황" description="오늘 우리 학교 청소 현황을 확인해 보세요." action={<span className="date-label">2026년 10월 11일 · 일요일</span>} />
-    <div className="stats-grid"><Metric label="오늘 청소 인증" value="28" unit="건" icon="✓" color="green" note="전체 구역 중 82% 완료" /><Metric label="검수 대기" value={String(pending)} unit="건" icon="◷" color="amber" note="확인이 필요한 인증" /><Metric label="이의신청" value={String(appealCount)} unit="건" icon="↗" color="blue" note={appealCount ? '새로운 요청이 있어요' : '처리할 요청이 없어요'} /><Metric label="청소 운영 구역" value="12" unit="개" icon="▦" color="mint" note="활성 구역 기준" /></div>
-    <div className="dashboard-grid"><section className="panel"><PanelHead title="오늘 인증 현황" action={<button className="text-action" onClick={() => onNavigate('인증 접수')}>인증 검수 보기 →</button>} /><div className="progress-summary"><div className="progress-ring"><strong>82<span>%</span></strong></div><div><b>청소 인증이 잘 진행되고 있어요</b><p>오늘 목표 34건 중 28건이 완료됐어요.</p><div className="progress-track"><span style={{ width: '82%' }} /></div></div></div><div className="mini-stats"><span><i className="dot green" />승인 <b>25건</b></span><span><i className="dot amber" />검수 대기 <b>{pending}건</b></span><span><i className="dot gray" />미제출 <b>6건</b></span></div></section>
-      <section className="panel"><PanelHead title="빠른 확인" /><QuickLink title="인증 접수" detail={`${pending}건의 인증 사진을 확인해 주세요.`} count={String(pending)} onClick={() => onNavigate('인증 접수')} /><QuickLink title="이의신청" detail={`처리할 이의신청이 ${appealCount}건 있어요.`} count={String(appealCount)} onClick={() => onNavigate('이의신청')} /><QuickLink title="새 공지 작성" detail="학생들에게 안내를 전달해 보세요." count="＋" onClick={() => onNavigate('공지 관리')} /></section>
-    </div>
-    <section className="panel dashboard-bottom"><PanelHead title="오늘 청소 일정" /><div className="schedule-line"><span className="schedule-time">07:25</span><span className="schedule-marker" /><div><b>아침 청소</b><small>청소 시간 07:25 - 08:20 · 12개 구역</small></div><span className="soft-chip">진행 중</span></div></section>
-  </>
-}
-
-function ReviewPage({ reviews, onSelect }: { reviews: Review[]; onSelect: (review: Review) => void }) {
-  const waiting = reviews.filter((item) => item.result === '대기')
-  const processed = reviews.filter((item) => item.result !== '대기')
-  return <><PageHeading title="인증 접수" description="학생들이 제출한 청소 인증 사진을 확인하고 처리해 주세요." action={<span className="count-chip">검수 대기 <b>{waiting.length}</b></span>} />
-    <div className="review-layout"><section className="panel"><PanelHead title="확인할 인증" action={<span className="muted-count">{waiting.length}건 대기 중</span>} />{waiting.length ? <div className="review-list">{waiting.map((item) => <button className="review-row" key={item.id} onClick={() => onSelect(item)}><span className="photo-thumb"><PhotoIcon /></span><span className="review-copy"><b>{item.name}<small>{item.zone}</small></b><span>{item.note}</span></span><span className="review-meta"><small>{item.time}</small><span className="soft-chip amber">검수 대기</span></span><span className="row-arrow">›</span></button>)}</div> : <EmptyState title="모든 인증을 확인했어요" detail="새로운 청소 인증이 도착하면 이곳에 표시됩니다." />}</section>
-    <section className="panel processed-panel"><PanelHead title="최근 처리" /><div className="processed-list">{processed.map((item) => <div className="processed-row" key={item.id}><span className="student-avatar">{item.name.slice(0, 1)}</span><span><b>{item.name}</b><small>{item.zone} · {item.time}</small></span><ResultPill result={item.result} /></div>)}</div></section></div>
-  </>
-}
-
-function AppealPage({ tab, setTab, pending, completed, onSelect }: { tab: 'pending' | 'completed'; setTab: (tab: 'pending' | 'completed') => void; pending: Appeal[]; completed: Appeal[]; onSelect: (appeal: Appeal) => void }) {
-  const rows = tab === 'completed' ? completed : pending
-  return <><PageHeading title="이의신청" description="반려된 인증에 대해 다시 확인을 요청한 건이에요." action={<div className="appeal-tabs" role="tablist" aria-label="이의신청 처리 상태"><button role="tab" aria-selected={tab === 'pending'} className={tab === 'pending' ? 'selected' : ''} onClick={() => setTab('pending')}>처리 대기 <span>{pending.length}</span></button><button role="tab" aria-selected={tab === 'completed'} className={tab === 'completed' ? 'selected' : ''} onClick={() => setTab('completed')}>처리 완료 <span>{completed.length}</span></button></div>} />
-    <div className="appeal-table-wrap"><table className="appeal-table"><thead><tr><th>학생</th><th>구역</th><th>인증일</th><th>답변</th><th>결과</th></tr></thead><tbody>{rows.map((row) => <tr key={`${row.name}-${row.date}`} className={tab === 'pending' ? 'clickable-row' : ''} onClick={() => { if (tab === 'pending') onSelect(row) }}><td className="student-name">{row.name}</td><td>{row.zone}</td><td>{row.date}</td><td className="response">{row.response}</td><td><ResultPill result={row.result} /></td></tr>)}</tbody></table></div>
-  </>
-}
-
-function AppealModal({ appeal, onClose, onResolve }: { appeal: Appeal; onClose: () => void; onResolve: (result: '승인' | '반려') => void }) {
-  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section className="review-modal" role="dialog" aria-modal="true" aria-labelledby="appeal-title"><button className="modal-close" onClick={onClose} aria-label="닫기">×</button><span className="overline">이의신청 상세</span><h2 id="appeal-title">{appeal.name} · {appeal.zone}</h2><div className="photo-preview appeal-photo"><span>제출한 청소 인증 사진</span><small>{appeal.date}</small></div><div className="appeal-note"><b>학생 요청</b><p>청소를 마친 뒤 촬영한 사진입니다. 다시 확인 부탁드립니다.</p></div><div className="modal-actions"><button className="button secondary" onClick={() => onResolve('반려')}>반려 유지</button><button className="button primary" onClick={() => onResolve('승인')}>승인 처리</button></div></section></div>
-}
-
-function AreaPage({ tab, setTab, area, setArea, onToast }: { tab: 'areas' | 'schedule'; setTab: (tab: 'areas' | 'schedule') => void; area: string; setArea: (area: string) => void; onToast: (message: string) => void }) {
-  const [active, setActive] = useState(true)
-  const [students, setStudents] = useState(['김민준'])
-  const [assignOpen, setAssignOpen] = useState(false)
-  return <><PageHeading title="청소구역 관리" description="학기별 청소 시간과 구역, 담당 학생을 관리해요." action={<div className="segmented"><button className={tab === 'areas' ? 'selected' : ''} onClick={() => setTab('areas')}>청소구역</button><button className={tab === 'schedule' ? 'selected' : ''} onClick={() => setTab('schedule')}>운영 일정</button></div>} />
-    {tab === 'areas' ? <div className="area-workspace"><section className="panel area-map"><PanelHead title="2학기 청소구역" action={<span className="soft-chip green">12개 구역</span>} /><div className="floor-label"><GridIcon /><span><b>본관 · 1–3층</b><small>구역을 선택하면 담당 정보를 확인할 수 있어요.</small></span></div><div className="area-grid">{areaNames.map((name, index) => <button className={`area-card ${index % 4 !== 1 ? 'area-active' : 'area-inactive'} ${area === name ? 'chosen' : ''}`} key={name} onClick={() => setArea(name)}><span>{name}</span><small>{index % 3 === 0 ? '2명 담당' : index % 4 === 1 ? '미운영' : '1명 담당'}</small></button>)}</div><div className="legend"><span><i className="dot green" />청소 구역</span><span><i className="dot gray" />쉬는 구역</span></div></section>
-      <aside className="panel area-detail"><span className="overline">선택한 청소구역</span><h2>{area}</h2><div className="detail-row"><span>청소 시간</span><b>07:25 - 08:20</b></div><div className="detail-row"><span>운영 상태</span><button className={`toggle ${active ? 'on' : ''}`} onClick={() => setActive(!active)} aria-label="청소구역 운영 상태"><i /></button></div><div className="divider"/><PanelHead title="담당 학생" action={<button className="text-action" onClick={() => setAssignOpen(true)}>＋ 학생 지정</button>} /><div className="assigned-list">{students.length ? students.map((name, index) => <div className="student-row" key={name}><span className="student-avatar">{name.slice(0, 1)}</span><span><b>{name}</b><small>{['2학년 1반 3번','1학년 3반 8번','3학년 2반 11번'][index % 3]}</small></span><button className="icon-remove" onClick={() => setStudents((current) => current.filter((student) => student !== name))} aria-label={`${name} 배정 해제`}>×</button></div>) : <div className="no-assigned">아직 배정된 학생이 없어요.</div>}</div><div className="detail-tip">학생들이 골고루 청소할 수 있도록 공평하게 배정해 주세요.</div><button className="button primary full" onClick={() => onToast('구역 설정을 저장했어요.')}>변경사항 저장</button></aside></div>
-      : <ScheduleSettings onToast={onToast} />}
-    {assignOpen && <AssignStudentsModal assigned={students} onClose={() => setAssignOpen(false)} onSave={(next) => { setStudents(next); setAssignOpen(false); onToast('담당 학생을 저장했어요.') }} />}
-  </>
-}
-
-function ScheduleSettings({ onToast }: { onToast: (message: string) => void }) {
-  const [days, setDays] = useState(['토요일', '일요일'])
-  const [month, setMonth] = useState(new Date(2026, 9, 1))
-  const [holidays, setHolidays] = useState(['2026-10-03', '2026-10-09'])
-  const week = ['월요일', '화요일', '수요일', '목요일', '금요일', '토요일', '일요일']
-  const year = month.getFullYear()
-  const monthNumber = month.getMonth()
-  const monthDays = new Date(year, monthNumber + 1, 0).getDate()
-  const firstWeekday = new Date(year, monthNumber, 1).getDay()
-  const calendarCells = [...Array.from({ length: firstWeekday }, () => ''), ...Array.from({ length: monthDays }, (_, index) => String(index + 1))]
-  function holidayKey(day: string) { return `${year}-${String(monthNumber + 1).padStart(2, '0')}-${day.padStart(2, '0')}` }
-  return <><div className="settings-grid"><section className="panel settings-card"><PanelHead title="청소 운영 시간" /><p className="panel-description">학생들이 청소 인증을 제출할 수 있는 시간을 설정해요.</p><div className="time-fields"><label>시작 시간<input type="time" defaultValue="07:25" /></label><span>–</span><label>종료 시간<input type="time" defaultValue="08:20" /></label></div></section><section className="panel settings-card"><PanelHead title="쉬는 날" /><p className="panel-description">선택한 요일에는 청소 인증을 받지 않아요.</p><div className="day-selector">{week.map((day) => <button className={days.includes(day) ? 'off-day' : ''} key={day} onClick={() => setDays((current) => current.includes(day) ? current.filter((item) => item !== day) : [...current, day])}>{day.slice(0, 1)}</button>)}</div><div className="day-legend"><span><i className="dot green"/>청소하는 날</span><span><i className="dot gray"/>쉬는 날</span></div></section><section className="panel settings-card calendar-card"><PanelHead title="공휴일 관리" action={<span className="muted-count">날짜를 눌러 쉬는 날을 선택</span>} /><div className="calendar-head"><button aria-label="이전 달" onClick={() => setMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))}>‹</button><b>{year}년 {monthNumber + 1}월</b><button aria-label="다음 달" onClick={() => setMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))}>›</button></div><div className="calendar-grid">{['일','월','화','수','목','금','토'].map((day) => <span className="weekday" key={day}>{day}</span>)}{calendarCells.map((day, index) => day ? <button className={holidays.includes(holidayKey(day)) ? 'calendar-off' : ''} key={`${day}-${index}`} onClick={() => setHolidays((current) => current.includes(holidayKey(day)) ? current.filter((item) => item !== holidayKey(day)) : [...current, holidayKey(day)])}>{day}</button> : <span className="calendar-blank" key={`blank-${index}`} />)}</div></section></div><div className="settings-save"><button className="button primary" onClick={() => onToast('운영 설정을 저장했어요.')}>설정 저장</button></div></>
-}
-
-function AssignStudentsModal({ assigned, onClose, onSave }: { assigned: string[]; onClose: () => void; onSave: (names: string[]) => void }) {
-  const candidates = [['김민준','2학년 1반 3번'],['이서윤','1학년 3반 8번'],['박지호','3학년 2반 11번'],['최하은','2학년 2반 17번'],['오태훈','1학년 1반 5번']]
-  const [selected, setSelected] = useState(assigned)
-  const [query, setQuery] = useState('')
-  const filtered = candidates.filter(([name, number]) => `${name} ${number}`.includes(query.trim()))
-  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section className="assign-students-modal" role="dialog" aria-modal="true" aria-labelledby="assign-students-title"><button className="modal-close" onClick={onClose} aria-label="닫기">×</button><span className="overline">담당 학생 지정</span><h2 id="assign-students-title">학생을 선택해 주세요</h2><label className="search-box"><SearchIcon /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="이름 또는 학번 검색" /></label><div className="candidate-list">{filtered.map(([name, number]) => <label className="candidate-row" key={name}><input type="checkbox" checked={selected.includes(name)} onChange={() => setSelected((current) => current.includes(name) ? current.filter((item) => item !== name) : [...current, name])} /><span className="student-avatar">{name.slice(0,1)}</span><span><b>{name}</b><small>{number}</small></span></label>)}</div><div className="modal-actions"><span className="selected-count">{selected.length}명 선택</span><button className="button secondary" onClick={onClose}>취소</button><button className="button primary" onClick={() => onSave(selected)}>배정하기</button></div></section></div>
-}
-
-function ActivityPage({ search, setSearch, rows, onToast }: { search: string; setSearch: (value: string) => void; rows: string[][]; onToast: (message: string) => void }) {
-  const [student, setStudent] = useState<string[] | null>(null)
-  function exportCsv() {
-    const csv = [['학생','학번','구역','인증 시간','결과'], ...rows].map((row) => row.join(',')).join('\n')
-    const url = URL.createObjectURL(new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' }))
-    const link = document.createElement('a'); link.href = url; link.download = '환경지킴이_활동기록.csv'; link.click(); URL.revokeObjectURL(url); onToast('활동 기록을 내려받았어요.')
+function errorMessage(error: unknown) {
+  if (error instanceof ApiError) {
+    const translated: Record<string, string> = { RECRUITMENT_FULL: '모집 인원이 이미 마감됐어요.', INVALID_PERIOD: '모집 기간을 확인해 주세요.', INVALID_MAX_COUNT: '모집 인원은 반별 최대 6명이에요.', RECRUITMENT_CLOSED: '모집이 종료되어 수정할 수 없어요.', MAX_COUNT_BELOW_APPLICANTS: '현재 신청자 수보다 적게 정원을 설정할 수 없어요.', INACTIVE_AREA: '비활성 구역에는 학생을 배정할 수 없어요.', ZONE_MODEL_NOT_READY: 'AI 검수가 준비되지 않은 구역은 활성화할 수 없어요.', ASSIGNMENT_NOT_FOUND: '이미 배정이 해제된 학생이에요.', ALREADY_PROCESSED: '이미 처리된 요청이에요.', NOT_MANUAL_REVIEW: '수동 검토 대기 상태가 아니에요.', OAUTH_FAILED: 'DataGSM 로그인을 확인해 주세요.', UNAUTHORIZED: '로그인이 만료됐어요. 다시 로그인해 주세요.' }
+    return error.code && translated[error.code] ? translated[error.code] : error.message
   }
-  return <><PageHeading title="학생 · 활동 기록" description="학생별 청소 활동을 확인하고 기록을 내려받을 수 있어요." action={<button className="button secondary" onClick={exportCsv}><DownloadIcon /> 내보내기</button>} />
-    <section className="panel"><PanelHead title="청소 활동 목록" action={<label className="search-box"><SearchIcon /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="학생 또는 구역 검색" /></label>} /><div className="responsive-table"><table className="data-table"><thead><tr><th>학생</th><th>학급</th><th>청소구역</th><th>인증 시간</th><th>결과</th><th /></tr></thead><tbody>{rows.map((row) => <tr key={`${row[0]}-${row[3]}`}><td><b>{row[0]}</b></td><td>{row[1]}</td><td>{row[2]}</td><td>{row[3]}</td><td><ResultPill result={row[4] === '승인' ? '승인' : '대기'} /></td><td><button className="text-action" onClick={() => setStudent(row)}>상세 보기 →</button></td></tr>)}</tbody></table>{rows.length === 0 && <EmptyState title="검색 결과가 없어요" detail="다른 학생 이름이나 구역으로 검색해 보세요." />}</div></section>
-    {student && <div className="detail-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) setStudent(null) }}><section className="student-detail panel"><button className="modal-close" onClick={() => setStudent(null)} aria-label="닫기">×</button><span className="student-avatar large">{student[0].slice(0, 1)}</span><span className="overline">학생 활동 상세</span><h2>{student[0]}</h2><p>{student[1]}</p><div className="detail-row"><span>최근 청소구역</span><b>{student[2]}</b></div><div className="detail-row"><span>인증 시간</span><b>{student[3]}</b></div><div className="detail-row"><span>최근 결과</span><ResultPill result={student[4] === '승인' ? '승인' : '대기'} /></div><div className="activity-summary"><b>이번 달 활동</b><span>청소 인증 8회 · 평균 12분</span></div></section></div>}
-  </>
+  return error instanceof Error ? error.message : '요청을 처리하지 못했어요.'
 }
 
-function NoticePage({ notices, onNew }: { notices: { title: string; body: string; date: string }[]; onNew: () => void }) {
-  const [selected, setSelected] = useState(0)
-  return <><PageHeading title="공지 관리" description="청소와 학교 운영에 필요한 안내를 학생들에게 전달해요." action={<button className="button primary" onClick={onNew}>＋ 새 공지</button>} />
-    <div className="notice-layout"><section className="panel"><PanelHead title="공지 목록" action={<span className="muted-count">{notices.length}개</span>} /><div className="notice-list">{notices.map((notice, index) => <button className={`notice-row ${selected === index ? 'selected' : ''}`} key={`${notice.title}-${notice.date}`} onClick={() => setSelected(index)}><span className="notice-icon"><BellIcon /></span><span><b>{notice.title}</b><small>{notice.date}</small></span><span className="row-arrow">›</span></button>)}</div></section><section className="panel notice-detail"><span className="overline">공지 상세</span>{notices[selected] && <><h2>{notices[selected].title}</h2><span className="notice-date">{notices[selected].date}</span><div className="divider"/><p>{notices[selected].body}</p><div className="notice-audience">게시 대상 <b>전체 학생</b></div></>}</section></div>
-  </>
+function Login({ onLogin, loading, error }: { onLogin: (code: string, redirectUri: string) => void; loading: boolean; error: string }) {
+  const [loginError, setLoginError] = useState('')
+  const [startingLogin, setStartingLogin] = useState(false)
+
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search)
+    const receivedCode = query.get('code')
+    const receivedState = query.get('state')
+    const expectedState = sessionStorage.getItem('ecoguard.oauth-state')
+    const redirectUri = sessionStorage.getItem('ecoguard.oauth-redirect-uri')
+    const oauthError = query.get('error')
+
+    if (oauthError) {
+      sessionStorage.removeItem('ecoguard.oauth-state')
+      sessionStorage.removeItem('ecoguard.oauth-redirect-uri')
+      history.replaceState({}, '', window.location.pathname)
+      setLoginError('DataGSM 로그인에 실패했어요. 다시 시도해 주세요.')
+      return
+    }
+
+    if (!receivedCode && !receivedState) return
+
+    history.replaceState({}, '', window.location.pathname)
+    if (receivedCode && receivedState && expectedState && receivedState === expectedState && redirectUri) {
+      sessionStorage.removeItem('ecoguard.oauth-state')
+      sessionStorage.removeItem('ecoguard.oauth-redirect-uri')
+      onLogin(receivedCode, redirectUri)
+      return
+    }
+
+    sessionStorage.removeItem('ecoguard.oauth-state')
+    sessionStorage.removeItem('ecoguard.oauth-redirect-uri')
+    setLoginError('로그인 확인 정보가 일치하지 않아요. 다시 로그인해 주세요.')
+  }, [onLogin])
+
+  function startLogin() {
+    setStartingLogin(true)
+    setLoginError('')
+    try {
+      const state = crypto.randomUUID()
+      const request = createOAuthAuthorizationRequest(state)
+      if (!request) {
+        setLoginError('OAuth 환경변수 설정을 확인해 주세요.')
+        return
+      }
+      sessionStorage.setItem('ecoguard.oauth-state', state)
+      sessionStorage.setItem('ecoguard.oauth-redirect-uri', request.redirectUri)
+      window.location.assign(request.url)
+    } catch {
+      setLoginError('로그인 주소를 준비하지 못했어요. 다시 시도해 주세요.')
+    } finally {
+      setStartingLogin(false)
+    }
+  }
+
+  return <div className="admin-login-screen"><section className="login-brand-panel"><div className="login-brand"><SproutIcon /><b>환경지킴이</b></div><div className="login-hero"><h1>학교를 깨끗하게,<br />함께 만드는 습관</h1><p>학생들의 아침 청소 인증을 확인하고,<br />구역과 공지를 한곳에서 관리해요.</p></div><p className="login-footer">교사용 관리자 페이지</p></section><section className="login-form-panel"><div className="login-form-content"><div className="login-greeting"><h2>선생님, 안녕하세요</h2><p>학교 교사 계정으로 로그인해 주세요.</p></div><button className="button primary login-oauth" onClick={() => startLogin()} disabled={loading || startingLogin}>{loading || startingLogin ? '로그인 중…' : 'dataGSM으로 로그인'}</button><div className={`login-info ${error || loginError ? 'has-error' : ''}`}><InfoIcon /><p>{error || loginError || '교사 계정만 들어올 수 있어요. 학생은 모바일 앱에서 인증해 주세요.'}</p></div></div></section></div>
+}
+function SproutIcon() { return <svg className="login-sprout-icon" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 29V15" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/><path d="M15 16C8.8 16 5.4 12.8 5.2 7.2c5.8-.1 9.1 2.3 10 7.2" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M16 14.5C16 7.4 19.7 3.7 26.7 3.5c.3 6.9-3.1 10.6-10.1 11" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg> }
+function InfoIcon() { return <svg className="login-info-icon" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" strokeWidth="1.4"/><path d="M10 9v5m0-8h.01" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg> }
+
+function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) { return <section className={`card ${className}`}>{children}</section> }
+function CardTitle({ title, detail, action }: { title: string; detail?: string; action?: React.ReactNode }) { return <div className="card-title"><div><h2>{title}</h2>{detail && <p>{detail}</p>}</div>{action}</div> }
+function Status({ children }: { children: string }) { return <span className={`status status-${children}`}>{children}</span> }
+function Empty({ title, detail }: { title: string; detail: string }) { return <div className="empty-state"><span>⌕</span><b>{title}</b><p>{detail}</p></div> }
+
+function Dashboard({ reviews, appeals, recruitments: _recruitments, areas: _areas, onNavigate, onRefresh }: { reviews: ReviewItem[]; appeals: Appeal[]; recruitments: Recruitment[]; areas: Area[]; onNavigate: (page: Page) => void; onRefresh: () => void }) {
+  const stats = [
+    { label: '제출', value: '— / —', target: 'review' as Page, tone: '' },
+    { label: '승인', value: '—', target: 'review' as Page, tone: '' },
+    { label: '선생님 확인 대기 ›', value: String(reviews.length), target: 'review' as Page, tone: 'highlight' },
+    { label: '이의신청 ›', value: String(appeals.length), target: 'appeals' as Page, tone: 'muted' },
+    { label: '미제출', value: '—', target: 'activity' as Page, tone: '' },
+  ]
+  const latest = [
+    ...reviews.map((item) => ({ type: `선생님 확인 · ${new Date(item.submittedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}`, title: `${item.studentName} · ${item.areaName}`, detail: item.reason || item.failReasons.join(', ') || 'AI가 판단하기 어려운 사진', page: 'review' as Page })),
+    ...appeals.map((item) => ({ type: '이의신청 · 확인 필요', title: `${item.studentName} · ${item.areaName}`, detail: item.content, page: 'appeals' as Page })),
+  ].slice(0, 3)
+  return <><div className="stats-grid dashboard-stats">{stats.map(({ label, value, target, tone }) => <button className={`stat-card ${tone}`} key={label} onClick={() => onNavigate(target)}><span>{label}</span><strong>{value}</strong></button>)}</div><div className="dashboard-grid"><Card className="dashboard-table"><div className="card-title dashboard-table-title"><h2>학생별 오늘 인증</h2><div className="dashboard-filters"><button className="active">전체</button><button onClick={() => onNavigate('review')}>확인 대기</button><button>승인</button><button>반려</button><button>미제출</button></div></div><div className="table-wrap"><table><thead><tr><th>학생</th><th>구역</th><th>제출</th><th>상태</th></tr></thead><tbody>{reviews.map((item) => <tr key={item.verificationId}><td><b>{item.studentName}</b></td><td>{item.areaName}</td><td>{new Date(item.submittedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</td><td><span className="status status-manual">선생님 확인</span></td></tr>)}{appeals.map((item) => <tr key={`appeal-${item.appealId}`}><td><b>{item.studentName}</b></td><td>{item.areaName}</td><td>—</td><td><span className="status status-appeal">이의신청</span></td></tr>)}{reviews.length + appeals.length === 0 && <tr className="dashboard-empty-row"><td colSpan={4}>오늘 인증 데이터가 없습니다.</td></tr>}</tbody></table></div></Card><div className="dashboard-side"><Card className="attention-card"><CardTitle title="확인이 필요해요" />{latest.length ? latest.map((item, index) => <button key={`${item.type}-${index}`} className={`attention-row ${item.page === 'appeals' ? 'appeal' : ''}`} onClick={() => onNavigate(item.page)}><small>{item.type}</small><b>{item.title}</b><span>{item.detail}</span></button>) : <div className="dashboard-quiet">확인이 필요한 항목이 없어요.</div>}</Card><Card className="week-card"><CardTitle title="이번 주 참여율" detail="제출 / 배정 인원" /><div className="week-empty"><span>—</span><i /><small>참여 데이터 없음</small></div></Card><button className="dashboard-refresh" onClick={onRefresh}>새로고침</button></div></div></>
 }
 
-function SettingsPage({ onToast }: { onToast: (message: string) => void }) {
-  return <><PageHeading title="운영 설정" description="청소 시간과 쉬는 날을 설정해 학사 일정에 맞게 운영해요." /><ScheduleSettings onToast={onToast} /></>
+function Review({ items, selectedId, onSelect, onDecide }: { items: ReviewItem[]; selectedId: number | null; onSelect: (id: number) => void; onDecide: (item: ReviewItem, decision: 'APPROVED' | 'REJECTED', reason?: string) => void }) {
+  const [reason, setReason] = useState('사진에 청소 구역이 잘 보이지 않아요')
+  const item = items.find((review) => review.verificationId === selectedId) ?? items[0]
+  return <div className="review-grid"><Card className="review-queue"><div className="queue-heading"><b>확인 대기</b><span>{items.length}건</span></div>{items.map((review) => <button key={review.verificationId} className={`review-item ${item?.verificationId === review.verificationId ? 'active' : ''}`} onClick={() => onSelect(review.verificationId)}><b>{review.studentName} · {review.areaName}</b><span>{review.areaName} · 제출 {new Date(review.submittedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</span><small>{review.reason || review.failReasons.join(' · ') || 'AI 판단을 확인해 주세요.'}</small></button>)}</Card>{item ? <Card className="review-detail"><div className="review-detail-grid"><div className="review-photo-column">{item.photoUrl ? <img className="evidence-picture" src={publicFileUrl(item.photoUrl)} alt={`${item.studentName} 인증 사진`} /> : <div className="evidence-picture">[학생 제출 사진]</div>}<small>촬영 {new Date(item.submittedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })} · 앱 카메라로 촬영됨</small></div><div className="review-info-column"><div className="review-who"><b>{item.studentName} · {item.areaName}</b><small>{item.areaName} · 제출 {new Date(item.submittedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</small></div><div className="review-info-box"><small>AI 판단</small><b>{item.reason || item.failReasons.join(' · ') || 'AI가 자동으로 처리하지 못해 교사 확인이 필요해요.'}</b></div><div className="zone-description review-zone-description"><b>구역 설명</b><p>{item.areaName} 청소 인증 사진을 확인해 주세요.</p></div><div className="reject-reasons"><b>반려할 때 학생에게 보여줄 사유</b>{['사진에 청소 구역이 잘 보이지 않아요', '청소 전 사진 같아요', '다른 장소 사진이에요', '사진이 너무 어두워요'].map((value) => <label key={value}><input type="radio" name="manualRejectReason" checked={reason === value} onChange={() => setReason(value)} />{value}</label>)}</div><div className="decision-actions"><button className="button primary" onClick={() => onDecide(item, 'APPROVED')}>승인 · 10분 적립</button><button className="button secondary" onClick={() => onDecide(item, 'REJECTED', reason)}>반려</button></div></div></div></Card> : <Card><Empty title="검수 대기 인증이 없어요" detail="새로운 인증이 제출되면 여기에 표시돼요." /></Card>}</div>
 }
 
-function NoticeModal({ onClose, onSave }: { onClose: () => void; onSave: (title: string, body: string) => void }) {
-  const [title, setTitle] = useState('')
-  const [body, setBody] = useState('')
-  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><form className="review-modal notice-modal" onSubmit={(event) => { event.preventDefault(); if (title.trim() && body.trim()) onSave(title.trim(), body.trim()) }}><button type="button" className="modal-close" onClick={onClose} aria-label="닫기">×</button><span className="overline">공지 관리</span><h2>새 공지 작성</h2><label>공지 제목<input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="제목을 입력해 주세요" /></label><label>공지 내용<textarea value={body} onChange={(event) => setBody(event.target.value)} placeholder="학생들에게 전달할 내용을 작성해 주세요" rows={5} /></label><div className="modal-actions"><button type="button" className="button secondary" onClick={onClose}>취소</button><button className="button primary" disabled={!title.trim() || !body.trim()}>공지 등록</button></div></form></div>
+function Appeals({ items, selectedId, onSelect, onDecide }: { items: Appeal[]; selectedId: number | null; onSelect: (id: number) => void; onDecide: (item: Appeal, decision: 'APPROVED' | 'REJECTED', reply: string) => void }) {
+  const [replies, setReplies] = useState<Record<number, string>>({})
+  const appeal = items.find((item) => item.appealId === selectedId) ?? items[0]
+  const reply = appeal ? replies[appeal.appealId] ?? '' : ''
+  return <div className="two-col appeal-layout"><Card><CardTitle title="이의신청 목록" detail={`검토 대기 ${items.length}건`} />{items.map((item) => <button key={item.appealId} className={`appeal-list ${appeal?.appealId === item.appealId ? 'active' : ''}`} onClick={() => onSelect(item.appealId)}><span className="avatar">{item.studentName.slice(0, 1)}</span><span><b>{item.studentName}<small> · {item.studentNumber ?? ''}</small></b><small>{item.verificationDate} · {item.round}차 이의신청</small></span><Status>{item.status}</Status></button>)}{!items.length && <Empty title="검토할 이의신청이 없어요" detail="반려 인증에 접수된 신청이 여기에 표시됩니다." />}</Card>{appeal && <Card><CardTitle title="이의신청 상세" detail="인증 사진과 학생 소명을 확인해 주세요." /><div className="appeal-evidence"><div className="photo-placeholder"><img src={publicFileUrl(appeal.photoUrl)} alt="원본 인증 사진" /></div><div><div className="detail-line"><small>학생</small><b>{appeal.studentName} · {appeal.studentNumber}</b></div><div className="detail-line"><small>구역 · 인증일</small><b>{appeal.areaName} · {appeal.verificationDate}</b></div><div className="detail-line"><small>AI 반려 사유</small><b>{appeal.failReasons.join(' · ') || '교사 반려'}</b></div>{appeal.photoUrls.map((url) => <img className="appeal-photo" key={url} src={publicFileUrl(url)} alt="이의신청 추가 사진" />)}<div className="callout"><b>학생 소명 · {appeal.round}차</b><p>{appeal.content}</p></div><label>교사 답변<textarea value={reply} onChange={(e) => setReplies((current) => ({ ...current, [appeal.appealId]: e.target.value }))} rows={3} placeholder="학생에게 전달할 답변을 입력해 주세요" /></label></div></div><div className="decision-actions"><button className="button secondary" disabled={!reply.trim()} onClick={() => onDecide(appeal, 'REJECTED', reply)}>이의신청 반려</button><button className="button primary" disabled={!reply.trim()} onClick={() => onDecide(appeal, 'APPROVED', reply)}>승인 · 10분 적립</button></div></Card>}</div>
 }
 
-function Metric({ label, value, unit, icon, color, note }: { label: string; value: string; unit: string; icon: string; color: string; note: string }) { return <article className="metric-card"><span className={`metric-icon ${color}`}>{icon}</span><span className="metric-label">{label}</span><strong>{value}<small>{unit}</small></strong><span className="metric-note">{note}</span></article> }
-function PanelHead({ title, action }: { title: string; action?: ReactNode }) { return <div className="panel-head"><h2>{title}</h2>{action}</div> }
-function QuickLink({ title, detail, count, onClick }: { title: string; detail: string; count: string; onClick: () => void }) { return <button className="quick-link" onClick={onClick}><span><b>{title}</b><small>{detail}</small></span><span className="quick-count">{count}</span><span className="row-arrow">›</span></button> }
-function ResultPill({ result }: { result: string }) { return <span className={`result-pill ${result === '승인' ? 'approved' : result === '반려' ? 'rejected' : 'pending'}`}>{result}</span> }
-function EmptyState({ title, detail }: { title: string; detail: string }) { return <div className="empty-state"><span>✓</span><b>{title}</b><small>{detail}</small></div> }
-function PhotoIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m4 18 5-5 3 3 3-4 5 6"/></svg> }
-function SearchIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg> }
-function DownloadIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></svg> }
-function LeafIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.7 3.5c-6 .2-10.7 2-12.6 5.7-1.4 2.6-.3 5.6 2.4 6.4 2.5.7 5.2-.7 6.3-3.7-2.6 1.1-4.5 1-5.9.4 2.9-2.7 6.3-4.4 9.8-5.2.6 4.5-.9 9.2-5 11.3-3.7 1.9-8.5.5-9.4-3.7C4 9.1 9.7 4 19.7 3.5Z" fill="currentColor"/></svg> }
-function HomeIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3.5 10 8.5-7 8.5 7v10.5h-6v-7h-5v7h-6V10Z" /></svg> }
-function CheckIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5h14v15H5zM8 9h8M8 12h8M8 15h5" /></svg> }
-function MessageIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5h16v12H9l-5 3v-15ZM8 10h8M8 13h5" /></svg> }
-function GridIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z" /></svg> }
-function PeopleIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3.5 19c.5-3.3 2.3-5 5.5-5s5 1.7 5.5 5M16 5.5a3 3 0 0 1 0 5.8M17 14c2.2.6 3.4 2.2 3.7 5" /></svg> }
-function BellIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 17h14l-2-2.5V10a5 5 0 0 0-10 0v4.5L5 17ZM10 20h4" /></svg> }
-function SettingsIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="m19 13.5 1 .8-1.5 2.6-1.3-.5a7.5 7.5 0 0 1-1.6.9l-.2 1.4h-3l-.2-1.4a7.5 7.5 0 0 1-1.6-.9l-1.3.5-1.5-2.6 1-.8a7 7 0 0 1 0-1.9l-1-.8 1.5-2.6 1.3.5a7.5 7.5 0 0 1 1.6-.9l.2-1.4h3l.2 1.4a7.5 7.5 0 0 1 1.6.9l1.3-.5 1.5 2.6-1 .8a7 7 0 0 1 0 1.9Z" transform="translate(-1 -1)" /></svg> }
-function ClockIcon() { return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/></svg> }
+function Recruitment({ items, onApplicants, onEdit }: { items: Recruitment[]; onApplicants: (item: Recruitment) => void; onEdit: (item: Recruitment) => void }) {
+  return <><div className="callout wide-callout recruitment-callout"><b>모집 공고</b><small>학년 · 반별 최대 6명까지 모집할 수 있어요. 신청은 먼저 한 순서대로 바로 확정됩니다.</small></div><Card className="recruitment-list"><div className="recruitment-columns"><span>학기</span><span>학년 · 반</span><span>모집 기간</span><span>모집 인원</span><span>신청자</span></div>{items.map((item) => <div className="recruitment-row" key={item.recruitmentId}><button className="row-semester" onClick={() => onEdit(item)}>{item.semester}</button><span>{item.grade}학년 · {item.classNo}반</span><span>{item.period.start.slice(0, 10)} – {item.period.end.slice(0, 10)}</span><span>최대 {item.maxCount}명</span><button className="text-button" onClick={() => onApplicants(item)}>{item.applicantCount}명 · 신청자 관리 ›</button></div>)}{!items.length && <Empty title="등록된 모집 공고가 없어요" detail="새 모집 공고를 등록해 주세요." />}</Card></>
+}
 
-export default App
+function Applicants({ id, items, onBack }: { id: number; items: Applicant[]; onBack: () => void }) { return <><button className="text-button" onClick={onBack}>← 모집 목록</button><Card className="applicant-list"><CardTitle title={`모집 #${id} 신청자`} detail={`${items.length}명 · 신청 순서대로 표시`} />{items.map((item) => <div className="applicant-row" key={item.applicationId}><span className="order-badge">{item.order}</span><span>{item.studentNumber ?? '-'}</span><b>{item.name}</b><span>{item.motivation}</span></div>)}{!items.length && <Empty title="신청자가 없어요" detail="학생이 신청하면 순서대로 표시됩니다." />}</Card></> }
+
+function Zones({ areas, onToggle, onAssign, onRemove }: { areas: Area[]; onToggle: (area: Area) => void; onAssign: (area: Area) => void; onRemove: (area: Area, student: Area['assignedStudents'][number], reason: string) => void }) {
+  const floors = ['본관 1층', '본관 2층', '본관 3층', '별관 1층']
+  const [floor, setFloor] = useState('본관 2층'); const [selectedId, setSelectedId] = useState<number | null>(null)
+  const floorNumber = floor === '본관 1층' ? '1' : floor === '본관 2층' ? '2' : floor === '본관 3층' ? '3' : '별'
+  const filtered = areas.filter((area) => {
+    const code = area.zoneCode.toLowerCase()
+    if (floorNumber === '별') return code.startsWith('practice_')
+    if (code.startsWith('main_stair_') || code.startsWith('geumbong_stair_')) return true
+    if (floorNumber === '1' && code.startsWith('main_entrance_')) return true
+    return code.endsWith(`f${floorNumber}`)
+  })
+  const selected = filtered.find((area) => area.areaId === selectedId) ?? filtered[0]
+  return <><div className="floor-tabs page-floor-tabs">{floors.map((item) => <button key={item} className={floor === item ? 'active' : ''} onClick={() => { setFloor(item); setSelectedId(null) }}>{item}</button>)}</div><div className="zone-layout"><Card><div className="zone-grid">{filtered.map((area, index) => <button key={area.areaId} className={`zone-tile ${area.isActive ? 'on' : 'off'} ${selected?.areaId === area.areaId ? 'picked' : ''}`} onClick={() => setSelectedId(area.areaId)}><span className="zone-index">{String(index + 1).padStart(2, '0')}</span><b>{area.name}</b><small>{area.isActive ? `청소 구역　${area.assignedStudents.length}명` : '청소 안 함'}</small></button>)}</div><div className="legend"><span><i className="legend-active" />청소 구역</span><span><i className="legend-off" />청소 안 함</span><span><i className="legend-picked" />선택됨</span></div></Card>{selected && <Card className="zone-detail"><div className="zone-detail-title"><h2>{selected.name}</h2><label>청소 구역<button className={`switch ${selected.isActive ? 'checked' : ''}`} aria-label="구역 활성화" onClick={() => onToggle(selected)}><i /></button></label></div><div className="zone-description"><b>구역 안내</b><p>{selected.description || '구역 안내가 등록되지 않았습니다.'}</p>{selected.cleanTime && <small>활동 시간 {selected.cleanTime}</small>}</div><div className="assigned-heading"><b>담당 학생</b><span>{selected.assignedStudents.length}명</span></div>{selected.assignedStudents.map((student) => <div className="assigned-student" key={student.studentId}><span><b>{student.name}</b><small> · {student.studentNumber ?? ''}</small></span><button className="remove-student" aria-label={`${student.name} 배정 해제`} onClick={() => { const reason = window.prompt(`${student.name} 학생을 제외하는 사유를 입력해 주세요.`); if (reason?.trim()) onRemove(selected, student, reason.trim()) }}>×</button></div>)}{!selected.assignedStudents.length && <p className="muted empty-inline">배정된 학생이 없습니다.</p>}<button className="button secondary full-button" disabled={!selected.isActive} onClick={() => onAssign(selected)}>＋ 학생 배정</button><button className="button primary zone-save">저장</button></Card>}</div>{areas.length > 0 && filtered.length === 0 && <Empty title={`${floor} 구역이 없어요`} detail="서버에 등록된 구역 이름에 층 정보가 있는지 확인해 주세요." />}</>
+}
+
+function Activity({ students, keyword, onSearch, sort, onSort, onSelect }: { students: StudentActivity[]; keyword: string; onSearch: (value: string) => void; sort: string; onSort: (value: string) => void; onSelect: (student: StudentActivity) => void }) {
+  const sorted = [...students].sort((a, b) => sort === '활동 시간순' ? b.totalMinutes - a.totalMinutes : sort === '미제출 많은 순' ? a.name.localeCompare(b.name, 'ko') : a.name.localeCompare(b.name, 'ko'))
+  return <Card className="activity-list"><div className="activity-toolbar"><label className="search-box"><span>⌕</span><input value={keyword} onChange={(e) => onSearch(e.target.value)} placeholder="이름이나 학번으로 찾기" /></label><div className="sort-pills">{['이름순', '활동 시간순', '미제출 많은 순'].map((item) => <button key={item} className={sort === item ? 'active' : ''} onClick={() => onSort(item)}>{item}</button>)}</div></div>{students.length ? <div className="table-wrap"><table><thead><tr><th>학생</th><th>구역</th><th>승인</th><th>반려</th><th>미제출</th><th>활동 시간</th><th>최근 인증</th></tr></thead><tbody>{sorted.map((student) => <tr key={student.studentId}><td><b>{student.name}</b><small> · {student.studentNumber ?? '학번 없음'}</small></td><td>{student.area ?? '미배정'}</td><td><b className="approved-count">{student.attendanceDays}회</b></td><td>—</td><td>—</td><td><b>{student.totalMinutes}분</b></td><td><button className="recent-link" onClick={() => onSelect(student)}>최근 기록 ›</button></td></tr>)}</tbody></table></div> : <Empty title="검색 결과가 없어요" detail="다른 이름이나 학번으로 검색해 주세요." />}</Card>
+}
+
+function StudentDetail({ student, month, selectedMonth, onBack }: { student: StudentActivity; month: StudentMonth | null; selectedMonth: Date; onBack: () => void }) {
+  return <Card className="activity-detail"><button className="text-button" onClick={onBack}>← 학생 목록</button><div className="student-detail-head"><div className="avatar">{student.name.slice(0, 1)}</div><div><h2>{student.name} <small>{student.studentNumber}</small></h2><p>{student.area ?? '구역 미배정'} · 누적 {student.totalMinutes}분</p></div></div>{month ? <><div className="stats-grid"><div className="stat-card"><span>승인</span><strong>{month.summary.approvedCount}회</strong></div><div className="stat-card"><span>반려</span><strong>{month.summary.rejectedCount}회</strong></div><div className="stat-card"><span>미제출</span><strong>{month.summary.notSubmittedCount}회</strong></div><div className="stat-card"><span>이번 달</span><strong>{month.monthlyMinutes}분</strong></div></div><div className="table-wrap"><table><thead><tr><th>날짜</th><th>구역</th><th>인증 결과</th><th>활동 시간</th><th>사진</th></tr></thead><tbody>{month.records.map((record) => <tr key={`${record.date}-${record.verificationId ?? record.result}`}><td>{record.date}</td><td>{record.area ?? '-'}</td><td>{translateResult(record.result)}</td><td>{record.minutes}분</td><td>{record.photoUrl ? <a href={publicFileUrl(record.photoUrl)} target="_blank" rel="noreferrer">사진 보기 ↗</a> : '-'}</td></tr>)}</tbody></table></div></> : <Empty title="월별 활동 기록을 불러오지 못했어요" detail={`${selectedMonth.getFullYear()}년 ${selectedMonth.getMonth() + 1}월 기록을 확인해 주세요.`} />}</Card>
+}
+function translateResult(result: string) { return ({ APPROVED: '승인', REJECTED: '반려', PROCESSING: '검수 중', MANUAL_REVIEW: '수동 검토', NOT_SUBMITTED: '미제출', UPCOMING: '예정' } as Record<string, string>)[result] ?? result }
+
+function Notices({ items, detail, selectedId, onSelect, onSave, onDelete }: { items: Notice[]; detail: NoticeDetail | null; selectedId: number | null; onSelect: (id: number) => void; onSave: (detail: NoticeDetail) => void; onDelete: (id: number) => void }) {
+  const [drafts, setDrafts] = useState<Record<number, NoticeDetail>>({})
+  const draft = detail ? drafts[detail.noticeId] ?? detail : null
+  return <div className="notice-layout"><Card className="notice-list"><div className="notice-items">{items.map((item) => <button key={item.noticeId} className={`notice-row ${selectedId === item.noticeId ? 'active' : ''}`} onClick={() => onSelect(item.noticeId)}><span><b>{item.title}</b><small>{new Date(item.createdAt).toLocaleDateString('ko-KR')} · {item.isRead ? '읽음' : '안 읽음'}</small></span></button>)}{!items.length && <Empty title="등록된 공지가 없어요" detail="새 공지를 작성해 주세요." />}</div></Card>{draft ? <Card className="notice-detail"><label className="notice-field"><b>제목</b><input value={draft.title} onChange={(e) => setDrafts((current) => ({ ...current, [draft.noticeId]: { ...draft, title: e.target.value } }))} /></label><label className="notice-field notice-body-field"><b>내용</b><textarea value={draft.content} onChange={(e) => setDrafts((current) => ({ ...current, [draft.noticeId]: { ...draft, content: e.target.value } }))} /></label><div className="notice-editor-actions"><button className="button secondary" onClick={() => onDelete(draft.noticeId)}>삭제</button><button className="button primary" onClick={() => onSave(draft)}>저장하고 올리기</button></div></Card> : <Card className="notice-detail"><Empty title="공지를 선택해 주세요" detail="새 공지를 작성하거나 목록에서 선택해 주세요." /></Card>}</div>
+}
+
+function RecruitmentForm({ initial, onSubmit }: { initial: Recruitment | null; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void }) {
+  return <form onSubmit={onSubmit}><div className="form-grid"><label>학기<select name="semester" defaultValue={initial?.semester ?? '2026-2'} disabled={Boolean(initial)}><option value="2026-1">2026학년도 1학기</option><option value="2026-2">2026학년도 2학기</option></select></label><label>학년<select name="grade" defaultValue={initial?.grade ?? 2} disabled={Boolean(initial)}>{[1, 2, 3].map((n) => <option key={n} value={n}>{n}학년</option>)}</select></label><label>반<input name="classNo" type="number" min="1" max="12" defaultValue={initial?.classNo ?? 1} required disabled={Boolean(initial)} /></label><label>모집 인원 (최대 6명)<input name="maxCount" type="number" min="1" max="6" defaultValue={initial?.maxCount ?? 6} required /></label><label>모집 시작일<input name="startDate" type="date" defaultValue={initial?.period.start.slice(0, 10)} required /></label><label>모집 종료일<input name="endDate" type="date" defaultValue={initial?.period.end.slice(0, 10)} required /></label></div><div className="modal-actions"><button className="button secondary" type="button" onClick={() => window.dispatchEvent(new Event('close-modal'))}>취소</button><button className="button primary">{initial ? '수정 저장' : '등록하기'}</button></div></form>
+}
+function AssignmentForm({ areas, selectedArea, onSubmit }: { areas: Area[]; selectedArea?: Area; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void }) {
+  const [keyword, setKeyword] = useState(''); const [matches, setMatches] = useState<StudentActivity[]>([]); const [searching, setSearching] = useState(false)
+  useEffect(() => { const timer = setTimeout(() => { setSearching(true); api.searchStudents(keyword).then(setMatches).catch(() => setMatches([])).finally(() => setSearching(false)) }, 250); return () => clearTimeout(timer) }, [keyword])
+  return <form onSubmit={onSubmit}><div className="callout">한 구역에 여러 학생을 배정할 수 있습니다. 학생은 한 구역만 담당할 수 있어요.</div><label>청소구역<select name="areaId" defaultValue={selectedArea?.areaId}>{areas.filter((area) => area.isActive).map((area) => <option key={area.areaId} value={area.areaId}>{area.name}</option>)}</select></label><label>학생 검색<input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="이름 또는 학번" /></label><div className="assign-student-options">{searching ? '검색 중…' : matches.map((student) => <label key={student.studentId}><input type="checkbox" name="studentId" value={student.studentId} /><span>{student.name} · {student.studentNumber ?? '학번 없음'}{student.area ? ` · 현재 ${student.area}` : ''}</span></label>)}{!searching && !matches.length && <small>학생 검색 결과가 없습니다.</small>}</div><div className="modal-actions"><button type="button" className="button secondary" onClick={() => window.dispatchEvent(new Event('close-modal'))}>취소</button><button className="button primary">배정하기</button></div></form>
+}
+function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
+  useEffect(() => { const close = () => onClose(); window.addEventListener('close-modal', close); return () => window.removeEventListener('close-modal', close) }, [onClose])
+  return <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}><section className="modal" role="dialog" aria-modal="true"><div className="modal-head"><div><h2>{title}</h2></div><button className="icon-btn" onClick={onClose}>×</button></div>{children}</section></div>
+}
+
+function exportStudentsCsv(students: StudentActivity[]) {
+  const rows = [['학생', '학번', '담당 구역', '승인 일수', '누적 활동 시간(분)'], ...students.map((student) => [student.name, student.studentNumber ?? '', student.area ?? '', String(student.attendanceDays), String(student.totalMinutes)])]
+  const blob = new Blob([`\uFEFF${rows.map((row) => row.map((cell) => `"${cell.replaceAll('"', '""')}"`).join(',')).join('\n')}`], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'ecoguard-student-activities.csv'; link.click(); URL.revokeObjectURL(url)
+}
