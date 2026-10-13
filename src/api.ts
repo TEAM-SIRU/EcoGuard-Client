@@ -327,7 +327,7 @@ export function publicFileUrl(path: string) {
 }
 
 export function getOAuthRedirectUri() {
-  return "https://ecoguard-web.https.gsmsv.site";
+  return "https://ecoguard-web.https.gsmsv.site/";
 }
 
 export function createOAuthAuthorizationRequest(state: string) {
