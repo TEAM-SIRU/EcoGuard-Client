@@ -1,0 +1,94 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# 동시에 두 번 배포되지 않도록 순서대로 처리한다
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run lint
+
+      # VITE_ 값은 빌드할 때 JS에 포함되므로 비밀값을 넣으면 안 된다(저장소 Variables 사용)
+      - name: Build
+        env:
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+          VITE_GSM_CLIENT_ID: ${{ vars.VITE_GSM_CLIENT_ID }}
+        run: npm run build
+
+      - name: Set up SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          if [ -n "$SSH_KNOWN_HOSTS" ]; then
+            printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          else
+            echo "::warning::SSH_KNOWN_HOSTS 시크릿이 없어 접속 시점에 받은 호스트 키를 신뢰합니다."
+            ssh-keyscan -p "$SSH_PORT" "$SSH_HOST" >> ~/.ssh/known_hosts
+          fi
+
+      - name: Upload build
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          tar -czf dist.tar.gz -C dist .
+          scp -i ~/.ssh/deploy_key -P "$SSH_PORT" dist.tar.gz "$SSH_USER@$SSH_HOST:/opt/ecoguard-web/dist.tar.gz"
+
+      - name: Switch release and health check
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          RELEASE: ${{ github.sha }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" "RELEASE=$RELEASE bash -s" <<'REMOTE'
+          set -e
+          cd /opt/ecoguard-web
+          mkdir -p releases
+          mkdir "releases/$RELEASE"
+          tar -xzf dist.tar.gz -C "releases/$RELEASE"
+          rm -f dist.tar.gz
+
+          # 이전 릴리스를 기억해 두고, current 링크를 새 릴리스로 한 번에 바꾼다
+          previous=$(readlink current || true)
+          ln -sfn "releases/$RELEASE" current.new
+          mv -T current.new current
+
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/ || true)
+          if [ "$code" = "200" ]; then
+            echo "OK: 웹 화면이 정상 응답합니다"
+            # 최근 3개 릴리스만 남긴다
+            ls -1dt releases/* | tail -n +4 | xargs -r rm -rf
+            exit 0
+          fi
+
+          echo "FAIL: http://localhost:3000/ 응답 코드 $code"
+          if [ -n "$previous" ]; then
+            echo "이전 릴리스로 되돌립니다: $previous"
+            ln -sfn "$previous" current.new
+            mv -T current.new current
+          fi
+          exit 1
+          REMOTE
