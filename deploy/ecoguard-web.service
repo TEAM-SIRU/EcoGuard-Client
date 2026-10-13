@@ -1,0 +1,14 @@
+[Unit]
+Description=EcoGuard web (static files on port 3000)
+After=network.target
+
+[Service]
+Type=simple
+# User= 은 배포 계정(SSH_USER)으로 바꾼다
+User=CHANGE_ME
+ExecStart=/usr/bin/python3 -m http.server 3000 --directory /opt/ecoguard-web/current
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
