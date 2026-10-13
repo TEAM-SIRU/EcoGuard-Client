@@ -67,7 +67,7 @@ jobs:
           set -e
           cd /opt/ecoguard-web
           mkdir -p releases
-          mkdir "releases/$RELEASE"
+          mkdir -p "releases/$RELEASE"
           tar -xzf dist.tar.gz -C "releases/$RELEASE"
           rm -f dist.tar.gz
 
