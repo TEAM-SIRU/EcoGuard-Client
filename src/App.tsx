@@ -214,7 +214,7 @@ function Login({ onLogin, loading, error }: { onLogin: (code: string, redirectUr
       const state = crypto.randomUUID()
       const request = createOAuthAuthorizationRequest(state)
       if (!request) {
-        setLoginError('OAuth 환경변수 설정을 확인해 주세요.')
+        setLoginError('VITE_GSM_CLIENT_ID를 배포 환경변수에 설정하고 다시 빌드해 주세요. 인가 URL에 client_id를 포함해도 됩니다.')
         return
       }
       sessionStorage.setItem('ecoguard.oauth-state', state)

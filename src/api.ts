@@ -331,14 +331,18 @@ export function getOAuthRedirectUri() {
 }
 
 export function createOAuthAuthorizationRequest(state: string) {
-  const clientId = import.meta.env.VITE_GSM_CLIENT_ID as string | undefined;
   const redirectUri = getOAuthRedirectUri();
-  if (!clientId || !redirectUri) return null;
-
   const authorizationUrl =
     (import.meta.env.VITE_GSM_AUTHORIZATION_URL as string | undefined) ??
     "https://oauth.authorization.datagsm.kr/v1/oauth/authorize";
   const url = new URL(authorizationUrl);
+  // Some deployments provide the complete DataGSM authorization URL, including
+  // its public client_id. Prefer the explicit variable when both are present.
+  const clientId =
+    (import.meta.env.VITE_GSM_CLIENT_ID as string | undefined)?.trim() ||
+    url.searchParams.get("client_id")?.trim();
+  if (!clientId || !redirectUri) return null;
+
   url.searchParams.set("client_id", clientId);
   url.searchParams.set("redirect_uri", redirectUri);
   url.searchParams.set("response_type", "code");
