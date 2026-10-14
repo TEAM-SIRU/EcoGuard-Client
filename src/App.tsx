@@ -43,7 +43,7 @@ export default function App() {
 
   const run = useCallback(async <T,>(key: string, fn: () => Promise<T>) => {
     try { const result = await fn(); setData((current) => ({ ...current, [key]: result })); return result }
-    catch (e) { if (e instanceof ApiError && e.code === 'NO_SEARCH_RESULT') { setData((current) => ({ ...current, [key]: [] })); return [] as T } setError(errorMessage(e)); return null }
+    catch (e) { setError(errorMessage(e)); return null }
   }, [])
   const reload = useCallback(() => setReloadKey((n) => n + 1), [])
 
@@ -69,7 +69,15 @@ export default function App() {
     if (page === 'appeals') void Promise.resolve().then(() => run('appeals', () => api.appeals()))
     if (page === 'recruitment') void Promise.resolve().then(() => run('recruitments', api.recruitments))
     if (page === 'zones') void Promise.resolve().then(() => run('areas', api.areas))
-    if (page === 'activity') void Promise.resolve().then(() => run('students', () => api.searchStudents(keyword)))
+    if (page === 'activity') {
+      let cancelled = false
+      setData((current) => ({ ...current, students: [] }))
+      setError('')
+      api.searchStudents(keyword)
+        .then((students) => { if (!cancelled) setData((current) => ({ ...current, students })) })
+        .catch((e) => { if (!cancelled) setError(errorMessage(e)) })
+      return () => { cancelled = true }
+    }
     if (page === 'notices') void Promise.resolve().then(() => run('notices', api.notices))
   }, [authenticated, profile, page, reloadKey, keyword, run, designPreview])
 

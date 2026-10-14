@@ -294,10 +294,16 @@ export const api = {
       method: "DELETE",
       body: JSON.stringify({ reason }),
     }),
-  searchStudents: (keyword: string) =>
-    request<StudentActivity[]>(
-      `/students/activities${keyword ? `?keyword=${encodeURIComponent(keyword)}` : ""}`,
-    ),
+  searchStudents: async (keyword: string) => {
+    try {
+      return await request<StudentActivity[]>(
+        `/students/activities${keyword ? `?keyword=${encodeURIComponent(keyword)}` : ""}`,
+      );
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404 && error.code === "NO_SEARCH_RESULT") return [];
+      throw error;
+    }
+  },
   studentMonth: (id: number, year: number, month: number) =>
     request<StudentMonth>(
       `/students/${id}/activities?year=${year}&month=${month}`,
