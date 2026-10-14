@@ -81,7 +81,8 @@ async function request<T>(
     );
   }
   if (response.status === 204) return undefined as T;
-  return response.json() as Promise<T>;
+  const text = await response.text();
+  return (text ? JSON.parse(text) : undefined) as T;
 }
 
 async function refreshTokens() {
@@ -247,7 +248,6 @@ export const api = {
   decideReview: (
     id: number,
     decision: "APPROVED" | "REJECTED",
-    _reason?: string,
   ) =>
     request<void>(`/verifications/${id}/review`, {
       method: "PATCH",
@@ -289,15 +289,18 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ studentIds }),
     }),
-  removeAssignment: (areaId: number, studentId: number, reason: string) =>
-    request<void>(`/cleaning-areas/${areaId}/assignments/${studentId}`, {
-      method: "DELETE",
-      body: JSON.stringify({ reason }),
-    }),
-  searchStudents: (keyword: string) =>
-    request<StudentActivity[]>(
-      `/students/activities${keyword ? `?keyword=${encodeURIComponent(keyword)}` : ""}`,
-    ),
+  removeAssignment: (areaId: number, studentId: number) =>
+    request<void>(`/cleaning-areas/${areaId}/assignments/${studentId}`, { method: "DELETE" }),
+  searchStudents: async (keyword: string) => {
+    try {
+      return await request<StudentActivity[]>(
+        `/students/activities${keyword ? `?keyword=${encodeURIComponent(keyword)}` : ""}`,
+      );
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404 && error.code === "NO_SEARCH_RESULT") return [];
+      throw error;
+    }
+  },
   studentMonth: (id: number, year: number, month: number) =>
     request<StudentMonth>(
       `/students/${id}/activities?year=${year}&month=${month}`,
