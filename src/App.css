@@ -209,3 +209,22 @@
 .app-shell .dashboard-table,.app-shell .notice-list,.app-shell .applicant-list{padding:0}
 .app-shell .recruitment-list{padding:28px 20px}
 .app-shell .activity-list{padding:24px}
+
+/* Keep the existing tab styling while containing its bar within the content width. */
+.app-shell .page-floor-tabs{
+  position:relative;
+  top:auto;
+  right:auto;
+  width:max-content;
+  max-width:100%;
+  height:auto;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+  margin:0 0 18px auto;
+}
+@media(max-width:760px){
+  .app-shell .page-floor-tabs{
+    justify-content:flex-start;
+    margin:0 0 16px;
+  }
+}
