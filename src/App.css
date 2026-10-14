@@ -228,3 +228,26 @@
     margin:0 0 16px;
   }
 }
+
+.app-shell .page-header-actions{align-items:center;gap:12px;flex-wrap:wrap}
+.app-shell .month-picker{position:relative;display:inline-flex;align-items:center;gap:3px;min-height:42px;padding:4px;border:1px solid #e2e8e1;border-radius:9px;background:#fff;box-shadow:0 2px 6px #1a32120a}
+.app-shell .month-step{width:32px;height:32px;display:grid;place-items:center;border:0;border-radius:6px;background:transparent;color:#69746a;font-size:23px;line-height:1}
+.app-shell .month-step:hover{background:#f2f7f1;color:#2e8740}
+.app-shell .month-current{min-width:124px;height:32px;padding:0 9px;border:0;border-radius:6px;background:#f5f8f4;color:#344236;font-size:13px;font-weight:650;white-space:nowrap}
+.app-shell .month-current span{margin-left:6px;color:#7d897e;font-size:10px}
+.app-shell .month-picker-native{position:absolute;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none;clip-path:inset(50%);left:50%;top:50%}
+.app-shell .logout-confirm p{margin:0;color:#667167;font-size:14px;line-height:1.6}
+.app-shell .today-filters{padding:0 18px 14px;border-bottom:1px solid #edf0ed}
+.app-shell .today-filters>div{display:flex;gap:6px;overflow-x:auto}
+.app-shell .today-filters button{height:36px;display:flex;align-items:center;gap:8px;flex:0 0 auto;padding:0 11px;border:1px solid transparent;border-radius:7px;background:transparent;color:#758076;font-size:12px;font-weight:550;white-space:nowrap}
+.app-shell .today-filters button:hover{background:#f6f8f5;color:#3d6846}
+.app-shell .today-filters button.active{border-color:#dcebd8;background:#eff7ec;color:#2f8240;font-weight:650}
+.app-shell .today-filters button span{min-width:20px;height:20px;display:grid;place-items:center;padding:0 5px;border-radius:20px;background:#edf0ed;color:#768076;font-size:10px}
+.app-shell .today-filters button.active span{background:#dcefd8;color:#347c40}
+.app-shell .dashboard-table-title>span{color:#89938a;font-size:12px;white-space:nowrap}
+.app-shell .dashboard-table td small{display:block}
+@media(max-width:760px){
+  .app-shell .page-header-actions{width:100%;justify-content:space-between}
+  .app-shell .month-picker{min-height:42px}
+  .app-shell .today-filters{padding:0 12px 12px}
+}

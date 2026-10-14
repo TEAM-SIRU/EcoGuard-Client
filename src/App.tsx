@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, ApiError, createOAuthAuthorizationRequest, hasSession, login, logout, onUnauthorized, publicFileUrl, type Applicant, type Appeal, type Area, type Notice, type NoticeDetail, type Profile, type Recruitment, type ReviewItem, type StudentActivity, type StudentMonth } from './api'
 import './App.css'
 
@@ -46,6 +46,7 @@ export default function App() {
   const [selectedNotice, setSelectedNotice] = useState<number | null>(noticeDeletePreview ? previewNotice.noticeId : null)
   const [noticeDetail, setNoticeDetail] = useState<NoticeDetail | null>(noticeDeletePreview ? previewNoticeDetail : null)
   const [modal, setModal] = useState<'recruit' | 'assign' | 'notice' | null>(null)
+  const [logoutConfirm, setLogoutConfirm] = useState(false)
   const [editingRecruitment, setEditingRecruitment] = useState<Recruitment | null>(null)
 
   const run = useCallback(async <T,>(key: string, fn: () => Promise<T>) => {
@@ -110,7 +111,7 @@ export default function App() {
       setAuthenticated(true)
     } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) }
   }, [])
-  async function handleLogout() { try { await logout() } catch { /* Local logout must complete if the server is unavailable. */ } finally { setAuthenticated(false); setProfile(null); setData({}); setError('') } }
+  async function handleLogout() { try { await logout() } catch { /* Local logout must complete if the server is unavailable. */ } finally { setLogoutConfirm(false); setAuthenticated(false); setProfile(null); setData({}); setError('') } }
   async function openApplicants(item: Recruitment) {
     setSelectedRecruitment(item.recruitmentId); setLoading(true); setError('')
     try { setApplicants(await api.applicants(item.recruitmentId)) } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) }
@@ -157,15 +158,15 @@ export default function App() {
   }
 
   if (!authenticated) return <Login onLogin={handleLogin} loading={loading} error={error} />
-  if (profile?.role === 'STUDENT') return <div className="auth-message"><b>교사 계정이 필요해요</b><p>이 화면은 교사용 관리 페이지입니다.</p><button className="button secondary" onClick={() => void handleLogout()}>로그아웃</button></div>
+  if (profile?.role === 'STUDENT') return <div className="auth-message"><b>교사 계정이 필요해요</b><p>이 화면은 교사용 관리 페이지입니다.</p><button className="button secondary" onClick={() => setLogoutConfirm(true)}>로그아웃</button>{logoutConfirm && <Modal title="로그아웃하시겠어요?" onClose={() => setLogoutConfirm(false)}><div className="logout-confirm"><p>관리자 페이지에서 로그아웃합니다.</p><div className="modal-actions"><button className="button secondary" onClick={() => setLogoutConfirm(false)}>취소</button><button className="button primary" onClick={() => void handleLogout()}>로그아웃</button></div></div></Modal>}</div>
   if (!profile) return <div className="auth-message">계정 정보를 불러오는 중…</div>
 
   const title = pageTitles[page]
   return <div className="app-shell">
-    <aside className="sidebar"><div className="brand">환경지킴이<small>교사 관리</small></div><div className="nav-group">{navigation.map((item) => <button key={item.id} className={`nav-item ${page === item.id ? 'selected' : ''}`} onClick={() => { setPage(item.id); if (item.id === 'recruitment') setSelectedRecruitment(null); setSelectedStudent(null); setError('') }}><span className="nav-icon">{item.icon}</span>{item.label}{item.id === 'review' && reviews.length > 0 && <b className="nav-count">{reviews.length}</b>}{item.id === 'appeals' && appeals.length > 0 && <b className="nav-count">{appeals.length}</b>}</button>)}</div><div className="sidebar-bottom"><div className="avatar">{profile.name.slice(0, 1)}</div><div>{profile.name} 선생님<small>교사 계정</small></div><button className="icon-btn" title="로그아웃" onClick={() => void handleLogout()}>↪</button></div></aside>
-    <main className="main-area"><div className="page-content"><div className={`page-title-row ${page === 'today' ? 'dashboard-page-title' : ''}`}><div>{page === 'today' && <span className="date-label">{now.toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short' })}</span>}<h1>{selectedStudent && page === 'activity' ? `${selectedStudent.name} 활동 기록` : page === 'recruitment' && selectedRecruitment !== null ? '모집 신청자 관리' : title}</h1>{page !== 'today' && <p className="page-subtitle">{selectedStudent && page === 'activity' ? `${selectedStudent.studentNumber ?? ''} · 승인 인증을 기준으로 활동 시간을 확인해요.` : pageSubtitles[page]}</p>}</div>{page === 'recruitment' && selectedRecruitment === null && <button className="button primary" onClick={() => { setEditingRecruitment(null); setModal('recruit') }}>＋ 새 모집 공고</button>}{page === 'notices' && <button className="button primary" onClick={() => setModal('notice')}>＋ 새 공지</button>}{page === 'activity' && <div className="page-header-actions"><input aria-label="월 선택" type="month" value={`${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`} onChange={(e) => { if (e.target.value) void changeMonth(new Date(`${e.target.value}-01T12:00:00`)) }} /><button className="button secondary" onClick={() => exportStudentsCsv(students)}>엑셀로 내보내기</button></div>}</div>
+    <aside className="sidebar"><div className="brand">환경지킴이<small>교사 관리</small></div><div className="nav-group">{navigation.map((item) => <button key={item.id} className={`nav-item ${page === item.id ? 'selected' : ''}`} onClick={() => { setPage(item.id); if (item.id === 'recruitment') setSelectedRecruitment(null); setSelectedStudent(null); setError('') }}><span className="nav-icon">{item.icon}</span>{item.label}{item.id === 'review' && reviews.length > 0 && <b className="nav-count">{reviews.length}</b>}{item.id === 'appeals' && appeals.length > 0 && <b className="nav-count">{appeals.length}</b>}</button>)}</div><div className="sidebar-bottom"><div className="avatar">{profile.name.slice(0, 1)}</div><div>{profile.name} 선생님<small>교사 계정</small></div><button className="icon-btn" title="로그아웃" onClick={() => setLogoutConfirm(true)}>↪</button></div></aside>
+    <main className="main-area"><div className="page-content"><div className={`page-title-row ${page === 'today' ? 'dashboard-page-title' : ''}`}><div>{page === 'today' && <span className="date-label">{now.toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short' })}</span>}<h1>{selectedStudent && page === 'activity' ? `${selectedStudent.name} 활동 기록` : page === 'recruitment' && selectedRecruitment !== null ? '모집 신청자 관리' : title}</h1>{page !== 'today' && <p className="page-subtitle">{selectedStudent && page === 'activity' ? `${selectedStudent.studentNumber ?? ''} · 승인 인증을 기준으로 활동 시간을 확인해요.` : pageSubtitles[page]}</p>}</div>{page === 'recruitment' && selectedRecruitment === null && <button className="button primary" onClick={() => { setEditingRecruitment(null); setModal('recruit') }}>＋ 새 모집 공고</button>}{page === 'notices' && <button className="button primary" onClick={() => setModal('notice')}>＋ 새 공지</button>}{page === 'activity' && <div className="page-header-actions"><MonthPicker value={month} onChange={(value) => void changeMonth(value)} /><button className="button secondary" onClick={() => exportStudentsCsv(students)}>엑셀로 내보내기</button></div>}</div>
       {error && <div className="inline-alert"><span>ⓘ</span>{error}<button onClick={() => setError('')}>×</button></div>}{loading && <div className="loading-line">서버에서 최신 정보를 불러오는 중…</div>}
-      {page === 'today' && <Dashboard reviews={reviews} appeals={appeals} onNavigate={setPage} />}
+      {page === 'today' && <Dashboard reviews={reviews} appeals={appeals} areas={areas} date={now} onNavigate={setPage} />}
       {page === 'review' && <Review items={reviews} selectedId={activeReviewId} onSelect={setSelectedReview} onDecide={async (item, decision, reason) => { setLoading(true); setError(''); try { await api.decideReview(item.verificationId, decision, reason); reload() } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) } }} />}
       {page === 'appeals' && <Appeals items={appeals} selectedId={activeAppealId} onSelect={setSelectedAppeal} onDecide={async (item, decision, reply) => { setLoading(true); setError(''); try { await api.decideAppeal(item.appealId, decision, reply, decision === 'APPROVED' ? '이의신청이 승인되었어요' : '이의신청 검토 결과'); reload() } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) } }} />}
       {page === 'recruitment' && (selectedRecruitment !== null ? <Applicants id={selectedRecruitment} items={applicants} onBack={() => setSelectedRecruitment(null)} /> : <Recruitment items={recruitments} onApplicants={openApplicants} onEdit={(item) => { setEditingRecruitment(item); setModal('recruit') }} />)}
@@ -174,6 +175,7 @@ export default function App() {
       {page === 'notices' && <Notices items={notices} detail={noticeDetail?.noticeId === activeNoticeId ? noticeDetail : null} selectedId={activeNoticeId} onSelect={setSelectedNotice} onSave={async (detail) => { setLoading(true); setError(''); try { await api.updateNotice(detail.noticeId, detail.title, detail.content); reload() } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) } }} onDelete={async (id) => { if (noticeDeletePreview) return; setLoading(true); setError(''); try { await api.deleteNotice(id); setSelectedNotice(null); reload() } catch (e) { setError(errorMessage(e)); throw e } finally { setLoading(false) } }} />}
     </div></main>
     {modal && <Modal title={modal === 'recruit' ? (editingRecruitment ? '모집 공고 수정' : '모집 공고 등록') : modal === 'assign' ? '학생 배정' : '새 공지'} onClose={() => setModal(null)}>{modal === 'recruit' ? <RecruitmentForm initial={editingRecruitment} onSubmit={saveRecruitment} /> : modal === 'assign' ? <AssignmentForm areas={areas} selectedArea={data.assignmentArea as Area | undefined} onSubmit={assignStudents} /> : <form onSubmit={saveNotice}><label>제목<input name="title" required /></label><label>내용<textarea name="content" rows={7} required /></label><div className="modal-actions"><button className="button secondary" type="button" onClick={() => setModal(null)}>취소</button><button className="button primary" disabled={loading}>저장하고 올리기</button></div></form>}</Modal>}
+    {logoutConfirm && <Modal title="로그아웃하시겠어요?" onClose={() => setLogoutConfirm(false)}><div className="logout-confirm"><p>관리자 페이지에서 로그아웃합니다.</p><div className="modal-actions"><button className="button secondary" onClick={() => setLogoutConfirm(false)}>취소</button><button className="button primary" onClick={() => void handleLogout()}>로그아웃</button></div></div></Modal>}
   </div>
 }
 
@@ -259,7 +261,70 @@ function CardTitle({ title, detail, action }: { title: string; detail?: string; 
 function Status({ children }: { children: string }) { return <span className={`status status-${children}`}>{children}</span> }
 function Empty({ title, detail }: { title: string; detail: string }) { return <div className="empty-state"><span>⌕</span><b>{title}</b><p>{detail}</p></div> }
 
-function Dashboard({ reviews, appeals, onNavigate }: { reviews: ReviewItem[]; appeals: Appeal[]; onNavigate: (page: Page) => void }) {
+function MonthPicker({ value, onChange }: { value: Date; onChange: (month: Date) => void }) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const monthValue = `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}`
+  function shiftMonth(delta: number) { onChange(new Date(value.getFullYear(), value.getMonth() + delta, 1, 12)) }
+  function openPicker() {
+    const input = inputRef.current
+    if (!input) return
+    if (typeof input.showPicker === 'function') input.showPicker()
+    else input.click()
+  }
+  return <div className="month-picker" aria-label="활동 기록 월 선택">
+    <button type="button" className="month-step" aria-label="이전 달" onClick={() => shiftMonth(-1)}>‹</button>
+    <button type="button" className="month-current" onClick={openPicker}>{value.getFullYear()}년 {value.getMonth() + 1}월 <span aria-hidden="true">▾</span></button>
+    <button type="button" className="month-step" aria-label="다음 달" onClick={() => shiftMonth(1)}>›</button>
+    <input ref={inputRef} className="month-picker-native" type="month" aria-label="직접 월 선택" value={monthValue} onChange={(event) => {
+      const [year, month] = event.target.value.split('-').map(Number)
+      if (year && month) onChange(new Date(year, month - 1, 1, 12))
+    }} />
+  </div>
+}
+
+type TodayStatus = 'APPROVED' | 'REJECTED' | 'PROCESSING' | 'MANUAL_REVIEW' | 'NOT_SUBMITTED' | 'UPCOMING' | 'UNKNOWN'
+type TodayStudent = { studentId: number; studentNumber: string | null; name: string; area: string; status: TodayStatus }
+type TodayFilter = 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'NOT_SUBMITTED'
+
+function Dashboard({ reviews, appeals, areas, date, onNavigate }: { reviews: ReviewItem[]; appeals: Appeal[]; areas: Area[]; date: Date; onNavigate: (page: Page) => void }) {
+  const [todayStudents, setTodayStudents] = useState<TodayStudent[]>([])
+  const [todayLoading, setTodayLoading] = useState(false)
+  const [todayFilter, setTodayFilter] = useState<TodayFilter>('ALL')
+  const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+
+  useEffect(() => {
+    const roster = new Map<number, TodayStudent>()
+    areas.forEach((area) => area.assignedStudents.forEach((student) => {
+      roster.set(student.studentId, { ...student, area: area.name, status: 'UNKNOWN' })
+    }))
+    const students = [...roster.values()]
+    if (!students.length) {
+      let cancelled = false
+      void Promise.resolve().then(() => { if (!cancelled) { setTodayStudents([]); setTodayLoading(false) } })
+      return () => { cancelled = true }
+    }
+    let cancelled = false
+    let next = 0
+    const results: TodayStudent[] = new Array(students.length)
+    queueMicrotask(() => { if (!cancelled) setTodayLoading(true) })
+    async function worker() {
+      while (next < students.length) {
+        const index = next++
+        const student = students[index]
+        let status: TodayStatus = 'UNKNOWN'
+        try {
+          const month = await api.studentMonth(student.studentId, date.getFullYear(), date.getMonth() + 1)
+          status = (month.records.find((record) => record.date === dateKey)?.result as TodayStatus | undefined) ?? 'UPCOMING'
+        } catch { /* Show the rest of the dashboard if one student's record is unavailable. */ }
+        results[index] = { ...student, status }
+      }
+    }
+    void Promise.all(Array.from({ length: Math.min(6, students.length) }, () => worker())).then(() => {
+      if (!cancelled) { setTodayStudents(results); setTodayLoading(false) }
+    })
+    return () => { cancelled = true }
+  }, [areas, dateKey, date])
+
   const stats = [
     { label: '선생님 확인 대기', value: String(reviews.length), target: 'review' as Page, tone: 'highlight' },
     { label: '이의신청', value: String(appeals.length), target: 'appeals' as Page, tone: 'muted' },
@@ -268,7 +333,17 @@ function Dashboard({ reviews, appeals, onNavigate }: { reviews: ReviewItem[]; ap
     ...reviews.map((item) => ({ type: `선생님 확인 · ${new Date(item.submittedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}`, title: `${item.studentName} · ${item.areaName}`, detail: item.reason || item.failReasons.join(', ') || 'AI가 판단하기 어려운 사진', page: 'review' as Page })),
     ...appeals.map((item) => ({ type: '이의신청 · 확인 필요', title: `${item.studentName} · ${item.areaName}`, detail: item.content, page: 'appeals' as Page })),
   ].slice(0, 3)
-  return <><div className="stats-grid dashboard-stats">{stats.map(({ label, value, target, tone }) => <button className={`stat-card ${tone}`} key={label} onClick={() => onNavigate(target)}><span>{label}</span><strong>{value}</strong></button>)}</div><div className="dashboard-grid"><Card className="dashboard-table"><div className="card-title dashboard-table-title"><h2>선생님 확인 대기</h2></div><div className="table-wrap"><table><thead><tr><th>학생</th><th>구역</th><th>제출</th><th>상태</th></tr></thead><tbody>{reviews.map((item) => <tr key={item.verificationId}><td><b>{item.studentName}</b></td><td>{item.areaName}</td><td>{new Date(item.submittedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</td><td><span className="status status-manual">선생님 확인</span></td></tr>)}{reviews.length === 0 && <tr className="dashboard-empty-row"><td colSpan={4}>확인 대기 인증이 없습니다.</td></tr>}</tbody></table></div></Card><div className="dashboard-side"><Card className="attention-card"><CardTitle title="확인이 필요해요" />{latest.length ? latest.map((item, index) => <button key={`${item.type}-${index}`} className={`attention-row ${item.page === 'appeals' ? 'appeal' : ''}`} onClick={() => onNavigate(item.page)}><small>{item.type}</small><b>{item.title}</b><span>{item.detail}</span></button>) : <div className="dashboard-quiet">확인이 필요한 항목이 없어요.</div>}</Card></div></div></>
+  const pending = (student: TodayStudent) => student.status === 'PROCESSING' || student.status === 'MANUAL_REVIEW'
+  const filters: { id: TodayFilter; label: string; count: number }[] = [
+    { id: 'ALL', label: '전체', count: todayStudents.length },
+    { id: 'PENDING', label: '확인 대기', count: todayStudents.filter(pending).length },
+    { id: 'APPROVED', label: '승인', count: todayStudents.filter((student) => student.status === 'APPROVED').length },
+    { id: 'REJECTED', label: '반려', count: todayStudents.filter((student) => student.status === 'REJECTED').length },
+    { id: 'NOT_SUBMITTED', label: '미제출', count: todayStudents.filter((student) => student.status === 'NOT_SUBMITTED').length },
+  ]
+  const filteredStudents = todayStudents.filter((student) => todayFilter === 'ALL' || (todayFilter === 'PENDING' ? pending(student) : student.status === todayFilter))
+  const statusLabels: Record<TodayStatus, string> = { APPROVED: '승인', REJECTED: '반려', PROCESSING: '확인 대기', MANUAL_REVIEW: '확인 대기', NOT_SUBMITTED: '미제출', UPCOMING: '예정', UNKNOWN: '확인 불가' }
+  return <><div className="stats-grid dashboard-stats">{stats.map(({ label, value, target, tone }) => <button className={`stat-card ${tone}`} key={label} onClick={() => onNavigate(target)}><span>{label}</span><strong>{value}</strong></button>)}</div><div className="dashboard-grid"><Card className="dashboard-table"><div className="card-title dashboard-table-title"><h2>오늘 청소 활동</h2><span>{date.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' })}</span></div><div className="today-filters" role="tablist" aria-label="오늘 활동 상태"><div>{filters.map((filter) => <button key={filter.id} type="button" role="tab" aria-selected={todayFilter === filter.id} className={todayFilter === filter.id ? 'active' : ''} onClick={() => setTodayFilter(filter.id)}>{filter.label}<span>{filter.count}</span></button>)}</div></div><div className="table-wrap"><table><thead><tr><th>학생</th><th>구역</th><th>상태</th></tr></thead><tbody>{filteredStudents.map((student) => <tr key={student.studentId}><td><b>{student.name}</b><small>{student.studentNumber ?? '학번 없음'}</small></td><td>{student.area}</td><td><span className={`status status-${statusLabels[student.status]}`}>{statusLabels[student.status]}</span></td></tr>)}{!filteredStudents.length && <tr className="dashboard-empty-row"><td colSpan={3}>{todayLoading ? '오늘 현황을 불러오는 중…' : todayStudents.length ? '이 상태의 학생이 없습니다.' : '배정된 학생이 없습니다.'}</td></tr>}</tbody></table></div></Card><div className="dashboard-side"><Card className="attention-card"><CardTitle title="확인이 필요해요" />{latest.length ? latest.map((item, index) => <button key={`${item.type}-${index}`} className={`attention-row ${item.page === 'appeals' ? 'appeal' : ''}`} onClick={() => onNavigate(item.page)}><small>{item.type}</small><b>{item.title}</b><span>{item.detail}</span></button>) : <div className="dashboard-quiet">확인이 필요한 항목이 없어요.</div>}</Card></div></div></>
 }
 
 function Review({ items, selectedId, onSelect, onDecide }: { items: ReviewItem[]; selectedId: number | null; onSelect: (id: number) => void; onDecide: (item: ReviewItem, decision: 'APPROVED' | 'REJECTED', reason?: string) => void }) {
@@ -318,7 +393,7 @@ function Zones({ areas, onToggle, onAssign, onRemove }: { areas: Area[]; onToggl
         <div className="zone-detail-title"><h2>{selected.name}</h2><label>청소 구역<button className={`switch ${selected.isActive ? 'checked' : ''}`} aria-label="구역 활성화" onClick={() => onToggle(selected)}><i /></button></label></div>
         <div className="zone-description"><b>구역 안내</b><p>{selected.description || '구역 안내가 등록되지 않았습니다.'}</p>{selected.cleanTime && <small>활동 시간 {selected.cleanTime}</small>}</div>
         <div className="assigned-heading"><b>담당 학생</b><span>{selected.assignedStudents.length}명</span></div>
-        {selected.assignedStudents.map((student) => <div className="assigned-student" key={student.studentId}><span><b>{student.name}</b><small> · {student.studentNumber ?? ''}</small></span><button type="button" className="remove-student" aria-label={`${student.name} 배정 해제`} title="배정 해제" disabled={removing} onClick={() => setRemovingStudent(student)}>×</button></div>)}
+        {selected.assignedStudents.map((student) => <div className="assigned-student" key={student.studentId}><span><b>{student.name}</b><small> · {student.studentNumber ?? ''}</small></span><button type="button" className="remove-student" aria-label={`${student.name} 배정 해제`} title="배정 해제" disabled={removing} onClick={() => setRemovingStudent(student)}>배정 해제</button></div>)}
         {!selected.assignedStudents.length && <p className="muted empty-inline">배정된 학생이 없습니다.</p>}
         <button className="button secondary full-button" disabled={!selected.isActive} onClick={() => onAssign(selected)}>＋ 학생 배정</button>
       </Card>}
