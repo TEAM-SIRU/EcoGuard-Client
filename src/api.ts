@@ -248,7 +248,6 @@ export const api = {
   decideReview: (
     id: number,
     decision: "APPROVED" | "REJECTED",
-    _reason?: string,
   ) =>
     request<void>(`/verifications/${id}/review`, {
       method: "PATCH",
@@ -290,6 +289,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ studentIds }),
     }),
+  removeAssignment: (areaId: number, studentId: number) =>
+    request<void>(`/cleaning-areas/${areaId}/assignments/${studentId}`, { method: "DELETE" }),
   searchStudents: async (keyword: string) => {
     try {
       return await request<StudentActivity[]>(

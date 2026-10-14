@@ -19,14 +19,21 @@ const EMPTY_NOTICES: Notice[] = []
 const pageSubtitles: Record<Page, string> = { today: '서버에 저장된 운영 현황을 확인해요.', review: 'AI가 판단하기 어려워 넘어온 사진이에요. 확인하면 학생 앱에 바로 결과가 보여요.', appeals: '학생이 제출한 이의신청을 확인하고 처리해요.', recruitment: '선착순 신청 현황과 모집 기간을 관리해요.', zones: '도면에서 청소구역을 활성화하고 담당 학생을 배정해요.', activity: '승인된 인증 1회당 10분을 활동 시간에 쌓아요. 행을 누르면 학생 상세로 가요.', notices: '학생 앱에 게시되는 공지를 관리해요.' }
 
 export default function App() {
-  const designPreview = import.meta.env.DEV && new URLSearchParams(window.location.search).has('admin-preview')
+  const [now] = useState(() => new Date())
+  const previewParams = new URLSearchParams(window.location.search)
+  const noticeDeletePreview = import.meta.env.DEV && previewParams.get('admin-preview') === 'notice-delete'
+  const zonesPreview = import.meta.env.DEV && previewParams.get('admin-preview') === 'zones'
+  const designPreview = import.meta.env.DEV && previewParams.has('admin-preview')
+  const previewNotice: Notice = { noticeId: 1, title: '아침 청소 활동 안내', preview: '이번 주 아침 청소 활동 안내입니다.', isRead: true, createdAt: now.toISOString() }
+  const previewAreas: Area[] = [{ areaId: 21, zoneCode: 'main_corridor_f2', name: '2층 복도', description: '복도와 계단 주변을 깨끗하게 관리해요.', cleanTime: '08:00–08:30', semester: '2026-2', isActive: true, assignedStudents: [{ studentId: 101, studentNumber: '2-3', name: '김하늘' }, { studentId: 102, studentNumber: '2-3', name: '박지우' }, { studentId: 103, studentNumber: '2-4', name: '이서윤' }] }]
+  const previewNoticeDetail: NoticeDetail = { noticeId: 1, title: previewNotice.title, content: previewNotice.preview, createdAt: previewNotice.createdAt, previousNoticeId: null, nextNoticeId: null }
   const [authenticated, setAuthenticated] = useState(hasSession() || designPreview)
   const [profile, setProfile] = useState<Profile | null>(designPreview ? { userId: 0, name: '담당 선생님', role: 'TEACHER', studentNumber: null, grade: null, classNo: null } : null)
-  const [page, setPage] = useState<Page>('today')
+  const [page, setPage] = useState<Page>(zonesPreview ? 'zones' : noticeDeletePreview ? 'notices' : 'today')
   const [reloadKey, setReloadKey] = useState(0)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [data, setData] = useState<Record<string, unknown>>({})
+  const [data, setData] = useState<Record<string, unknown>>(zonesPreview ? { areas: previewAreas } : noticeDeletePreview ? { notices: [previewNotice] } : {})
   const [selectedReview, setSelectedReview] = useState<number | null>(null)
   const [selectedAppeal, setSelectedAppeal] = useState<number | null>(null)
   const [selectedRecruitment, setSelectedRecruitment] = useState<number | null>(null)
@@ -36,8 +43,8 @@ export default function App() {
   const [selectedStudent, setSelectedStudent] = useState<StudentActivity | null>(null)
   const [studentMonth, setStudentMonth] = useState<StudentMonth | null>(null)
   const [month, setMonth] = useState(() => new Date())
-  const [selectedNotice, setSelectedNotice] = useState<number | null>(null)
-  const [noticeDetail, setNoticeDetail] = useState<NoticeDetail | null>(null)
+  const [selectedNotice, setSelectedNotice] = useState<number | null>(noticeDeletePreview ? previewNotice.noticeId : null)
+  const [noticeDetail, setNoticeDetail] = useState<NoticeDetail | null>(noticeDeletePreview ? previewNoticeDetail : null)
   const [modal, setModal] = useState<'recruit' | 'assign' | 'notice' | null>(null)
   const [editingRecruitment, setEditingRecruitment] = useState<Recruitment | null>(null)
 
@@ -71,8 +78,6 @@ export default function App() {
     if (page === 'zones') void Promise.resolve().then(() => run('areas', api.areas))
     if (page === 'activity') {
       let cancelled = false
-      setData((current) => ({ ...current, students: [] }))
-      setError('')
       api.searchStudents(keyword)
         .then((students) => { if (!cancelled) setData((current) => ({ ...current, students })) })
         .catch((e) => { if (!cancelled) setError(errorMessage(e)) })
@@ -91,11 +96,11 @@ export default function App() {
   const activeAppealId = appeals.some((item) => item.appealId === selectedAppeal) ? selectedAppeal : appeals[0]?.appealId ?? null
   const activeNoticeId = notices.some((item) => item.noticeId === selectedNotice) ? selectedNotice : notices[0]?.noticeId ?? null
   useEffect(() => {
-    if (!activeNoticeId || page !== 'notices') return
+    if (!activeNoticeId || page !== 'notices' || designPreview) return
     let cancelled = false
     api.notice(activeNoticeId).then((detail) => { if (!cancelled) setNoticeDetail(detail) }).catch((e) => { if (!cancelled) setError(errorMessage(e)) })
     return () => { cancelled = true }
-  }, [activeNoticeId, page, reloadKey])
+  }, [activeNoticeId, page, reloadKey, designPreview])
 
   const handleLogin = useCallback(async (authCode: string, redirectUri: string) => {
     setLoading(true); setError('')
@@ -105,7 +110,7 @@ export default function App() {
       setAuthenticated(true)
     } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) }
   }, [])
-  async function handleLogout() { await logout(); setAuthenticated(false); setProfile(null); setData({}); setError('') }
+  async function handleLogout() { try { await logout() } catch { /* Local logout must complete if the server is unavailable. */ } finally { setAuthenticated(false); setProfile(null); setData({}); setError('') } }
   async function openApplicants(item: Recruitment) {
     setSelectedRecruitment(item.recruitmentId); setLoading(true); setError('')
     try { setApplicants(await api.applicants(item.recruitmentId)) } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) }
@@ -116,6 +121,7 @@ export default function App() {
     catch (e) { setStudentMonth(null); setError(errorMessage(e)) } finally { setLoading(false) }
   }
   async function changeMonth(value: Date) {
+    if (!Number.isFinite(value.getTime())) return
     setMonth(value)
     if (!selectedStudent) return
     setLoading(true)
@@ -137,9 +143,8 @@ export default function App() {
     setLoading(true); setError('')
     try { await api.updateArea(area.areaId, !area.isActive); reload() } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) }
   }
-  async function assignStudents(event: React.FormEvent<HTMLFormElement>) {
+  async function assignStudents(event: React.FormEvent<HTMLFormElement>, ids: number[]) {
     event.preventDefault(); const form = new FormData(event.currentTarget); const areaId = Number(form.get('areaId'))
-    const ids = form.getAll('studentId').map(Number).filter(Number.isFinite)
     if (!ids.length) { setError('배정할 학생을 선택해 주세요.'); return }
     setLoading(true); setError('')
     try { await api.assignStudents(areaId, ids); setModal(null); reload() } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) }
@@ -158,15 +163,15 @@ export default function App() {
   const title = pageTitles[page]
   return <div className="app-shell">
     <aside className="sidebar"><div className="brand">환경지킴이<small>교사 관리</small></div><div className="nav-group">{navigation.map((item) => <button key={item.id} className={`nav-item ${page === item.id ? 'selected' : ''}`} onClick={() => { setPage(item.id); if (item.id === 'recruitment') setSelectedRecruitment(null); setSelectedStudent(null); setError('') }}><span className="nav-icon">{item.icon}</span>{item.label}{item.id === 'review' && reviews.length > 0 && <b className="nav-count">{reviews.length}</b>}{item.id === 'appeals' && appeals.length > 0 && <b className="nav-count">{appeals.length}</b>}</button>)}</div><div className="sidebar-bottom"><div className="avatar">{profile.name.slice(0, 1)}</div><div>{profile.name} 선생님<small>교사 계정</small></div><button className="icon-btn" title="로그아웃" onClick={() => void handleLogout()}>↪</button></div></aside>
-    <main className="main-area"><div className="page-content"><div className={`page-title-row ${page === 'today' ? 'dashboard-page-title' : ''}`}><div>{page === 'today' && <span className="date-label">{new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short' })}</span>}<h1>{selectedStudent && page === 'activity' ? `${selectedStudent.name} 활동 기록` : page === 'recruitment' && selectedRecruitment !== null ? '모집 신청자 관리' : title}</h1>{page !== 'today' && <p className="page-subtitle">{selectedStudent && page === 'activity' ? `${selectedStudent.studentNumber ?? ''} · 승인 인증을 기준으로 활동 시간을 확인해요.` : pageSubtitles[page]}</p>}</div>{page === 'recruitment' && selectedRecruitment === null && <button className="button primary" onClick={() => { setEditingRecruitment(null); setModal('recruit') }}>＋ 새 모집 공고</button>}{page === 'notices' && <button className="button primary" onClick={() => setModal('notice')}>＋ 새 공지</button>}{page === 'activity' && <div className="page-header-actions"><input aria-label="월 선택" type="month" value={`${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`} onChange={(e) => void changeMonth(new Date(`${e.target.value}-01T12:00:00`))} /><button className="button secondary" onClick={() => exportStudentsCsv(students)}>엑셀로 내보내기</button></div>}</div>
+    <main className="main-area"><div className="page-content"><div className={`page-title-row ${page === 'today' ? 'dashboard-page-title' : ''}`}><div>{page === 'today' && <span className="date-label">{now.toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short' })}</span>}<h1>{selectedStudent && page === 'activity' ? `${selectedStudent.name} 활동 기록` : page === 'recruitment' && selectedRecruitment !== null ? '모집 신청자 관리' : title}</h1>{page !== 'today' && <p className="page-subtitle">{selectedStudent && page === 'activity' ? `${selectedStudent.studentNumber ?? ''} · 승인 인증을 기준으로 활동 시간을 확인해요.` : pageSubtitles[page]}</p>}</div>{page === 'recruitment' && selectedRecruitment === null && <button className="button primary" onClick={() => { setEditingRecruitment(null); setModal('recruit') }}>＋ 새 모집 공고</button>}{page === 'notices' && <button className="button primary" onClick={() => setModal('notice')}>＋ 새 공지</button>}{page === 'activity' && <div className="page-header-actions"><input aria-label="월 선택" type="month" value={`${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`} onChange={(e) => { if (e.target.value) void changeMonth(new Date(`${e.target.value}-01T12:00:00`)) }} /><button className="button secondary" onClick={() => exportStudentsCsv(students)}>엑셀로 내보내기</button></div>}</div>
       {error && <div className="inline-alert"><span>ⓘ</span>{error}<button onClick={() => setError('')}>×</button></div>}{loading && <div className="loading-line">서버에서 최신 정보를 불러오는 중…</div>}
-      {page === 'today' && <Dashboard reviews={reviews} appeals={appeals} recruitments={recruitments} areas={areas} onNavigate={setPage} onRefresh={() => { reload(); void run('reviews', api.reviews); void run('appeals', () => api.appeals()); void run('recruitments', api.recruitments); void run('areas', api.areas) }} />}
-      {page === 'review' && <Review items={reviews} selectedId={activeReviewId} onSelect={setSelectedReview} onDecide={async (item, decision, reason) => { setLoading(true); setError(''); try { await api.decideReview(item.verificationId, decision, reason); reload() } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) } }} />}
+      {page === 'today' && <Dashboard reviews={reviews} appeals={appeals} onNavigate={setPage} onRefresh={() => { reload(); void run('reviews', api.reviews); void run('appeals', () => api.appeals()); void run('recruitments', api.recruitments); void run('areas', api.areas) }} />}
+      {page === 'review' && <Review items={reviews} selectedId={activeReviewId} onSelect={setSelectedReview} onDecide={async (item, decision) => { setLoading(true); setError(''); try { await api.decideReview(item.verificationId, decision); reload() } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) } }} />}
       {page === 'appeals' && <Appeals items={appeals} selectedId={activeAppealId} onSelect={setSelectedAppeal} onDecide={async (item, decision, reply) => { setLoading(true); setError(''); try { await api.decideAppeal(item.appealId, decision, reply, decision === 'APPROVED' ? '이의신청이 승인되었어요' : '이의신청 검토 결과'); reload() } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) } }} />}
       {page === 'recruitment' && (selectedRecruitment !== null ? <Applicants id={selectedRecruitment} items={applicants} onBack={() => setSelectedRecruitment(null)} /> : <Recruitment items={recruitments} onApplicants={openApplicants} onEdit={(item) => { setEditingRecruitment(item); setModal('recruit') }} />)}
-      {page === 'zones' && <Zones areas={areas} onToggle={toggleArea} onAssign={(area) => { setData((current) => ({ ...current, assignmentArea: area })); setModal('assign') }} />}
-      {page === 'activity' && (selectedStudent ? <StudentDetail student={selectedStudent} month={studentMonth} selectedMonth={month} onBack={() => { setSelectedStudent(null); setStudentMonth(null) }} /> : <Activity students={students} keyword={keyword} onSearch={setKeyword} sort={sort} onSort={setSort} onSelect={(student) => void openStudent(student)} />)}
-      {page === 'notices' && <Notices items={notices} detail={noticeDetail?.noticeId === activeNoticeId ? noticeDetail : null} selectedId={activeNoticeId} onSelect={setSelectedNotice} onSave={async (detail) => { setLoading(true); setError(''); try { await api.updateNotice(detail.noticeId, detail.title, detail.content); reload() } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) } }} onDelete={async (id) => { setLoading(true); setError(''); try { await api.deleteNotice(id); setSelectedNotice(null); reload() } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) } }} />}
+      {page === 'zones' && <Zones areas={areas} onToggle={toggleArea} onAssign={(area) => { setData((current) => ({ ...current, assignmentArea: area })); setModal('assign') }} onRemove={async (area, student) => { setLoading(true); setError(''); try { if (zonesPreview) setData((current) => ({ ...current, areas: (current.areas as Area[]).map((item) => item.areaId === area.areaId ? { ...item, assignedStudents: item.assignedStudents.filter((person) => person.studentId !== student.studentId) } : item) })); else { await api.removeAssignment(area.areaId, student.studentId); reload() } } catch (e) { setError(errorMessage(e)); throw e } finally { setLoading(false) } }} />}
+      {page === 'activity' && (selectedStudent ? <StudentDetail student={selectedStudent} month={studentMonth} selectedMonth={month} onBack={() => { setSelectedStudent(null); setStudentMonth(null) }} /> : <Activity students={students} keyword={keyword} onSearch={(value) => { setData((current) => ({ ...current, students: [] })); setError(''); setKeyword(value) }} sort={sort} onSort={setSort} onSelect={(student) => void openStudent(student)} />)}
+      {page === 'notices' && <Notices items={notices} detail={noticeDetail?.noticeId === activeNoticeId ? noticeDetail : null} selectedId={activeNoticeId} onSelect={setSelectedNotice} onSave={async (detail) => { setLoading(true); setError(''); try { await api.updateNotice(detail.noticeId, detail.title, detail.content); reload() } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) } }} onDelete={async (id) => { if (noticeDeletePreview) return; setLoading(true); setError(''); try { await api.deleteNotice(id); setSelectedNotice(null); reload() } catch (e) { setError(errorMessage(e)); throw e } finally { setLoading(false) } }} />}
     </div></main>
     {modal && <Modal title={modal === 'recruit' ? (editingRecruitment ? '모집 공고 수정' : '모집 공고 등록') : modal === 'assign' ? '학생 배정' : '새 공지'} onClose={() => setModal(null)}>{modal === 'recruit' ? <RecruitmentForm initial={editingRecruitment} onSubmit={saveRecruitment} /> : modal === 'assign' ? <AssignmentForm areas={areas} selectedArea={data.assignmentArea as Area | undefined} onSubmit={assignStudents} /> : <form onSubmit={saveNotice}><label>제목<input name="title" required /></label><label>내용<textarea name="content" rows={7} required /></label><div className="modal-actions"><button className="button secondary" type="button" onClick={() => setModal(null)}>취소</button><button className="button primary" disabled={loading}>저장하고 올리기</button></div></form>}</Modal>}
   </div>
@@ -181,7 +186,18 @@ function errorMessage(error: unknown) {
 }
 
 function Login({ onLogin, loading, error }: { onLogin: (code: string, redirectUri: string) => void; loading: boolean; error: string }) {
-  const [loginError, setLoginError] = useState('')
+  const [loginError, setLoginError] = useState(() => {
+    const query = new URLSearchParams(window.location.search)
+    if (query.has('error')) return 'DataGSM 로그인에 실패했어요. 다시 시도해 주세요.'
+    const receivedCode = query.get('code')
+    const receivedState = query.get('state')
+    if (!receivedCode && !receivedState) return ''
+    const expectedState = sessionStorage.getItem('ecoguard.oauth-state')
+    const redirectUri = sessionStorage.getItem('ecoguard.oauth-redirect-uri')
+    return receivedCode && receivedState && expectedState && receivedState === expectedState && redirectUri
+      ? ''
+      : '로그인 확인 정보가 일치하지 않아요. 다시 로그인해 주세요.'
+  })
   const [startingLogin, setStartingLogin] = useState(false)
 
   useEffect(() => {
@@ -196,7 +212,6 @@ function Login({ onLogin, loading, error }: { onLogin: (code: string, redirectUr
       sessionStorage.removeItem('ecoguard.oauth-state')
       sessionStorage.removeItem('ecoguard.oauth-redirect-uri')
       history.replaceState({}, '', window.location.pathname)
-      setLoginError('DataGSM 로그인에 실패했어요. 다시 시도해 주세요.')
       return
     }
 
@@ -212,7 +227,6 @@ function Login({ onLogin, loading, error }: { onLogin: (code: string, redirectUr
 
     sessionStorage.removeItem('ecoguard.oauth-state')
     sessionStorage.removeItem('ecoguard.oauth-redirect-uri')
-    setLoginError('로그인 확인 정보가 일치하지 않아요. 다시 로그인해 주세요.')
   }, [onLogin])
 
   function startLogin() {
@@ -245,25 +259,21 @@ function CardTitle({ title, detail, action }: { title: string; detail?: string; 
 function Status({ children }: { children: string }) { return <span className={`status status-${children}`}>{children}</span> }
 function Empty({ title, detail }: { title: string; detail: string }) { return <div className="empty-state"><span>⌕</span><b>{title}</b><p>{detail}</p></div> }
 
-function Dashboard({ reviews, appeals, recruitments: _recruitments, areas: _areas, onNavigate, onRefresh }: { reviews: ReviewItem[]; appeals: Appeal[]; recruitments: Recruitment[]; areas: Area[]; onNavigate: (page: Page) => void; onRefresh: () => void }) {
+function Dashboard({ reviews, appeals, onNavigate, onRefresh }: { reviews: ReviewItem[]; appeals: Appeal[]; onNavigate: (page: Page) => void; onRefresh: () => void }) {
   const stats = [
-    { label: '제출', value: '— / —', target: 'review' as Page, tone: '' },
-    { label: '승인', value: '—', target: 'review' as Page, tone: '' },
-    { label: '선생님 확인 대기 ›', value: String(reviews.length), target: 'review' as Page, tone: 'highlight' },
-    { label: '이의신청 ›', value: String(appeals.length), target: 'appeals' as Page, tone: 'muted' },
-    { label: '미제출', value: '—', target: 'activity' as Page, tone: '' },
+    { label: '선생님 확인 대기', value: String(reviews.length), target: 'review' as Page, tone: 'highlight' },
+    { label: '이의신청', value: String(appeals.length), target: 'appeals' as Page, tone: 'muted' },
   ]
   const latest = [
     ...reviews.map((item) => ({ type: `선생님 확인 · ${new Date(item.submittedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}`, title: `${item.studentName} · ${item.areaName}`, detail: item.reason || item.failReasons.join(', ') || 'AI가 판단하기 어려운 사진', page: 'review' as Page })),
     ...appeals.map((item) => ({ type: '이의신청 · 확인 필요', title: `${item.studentName} · ${item.areaName}`, detail: item.content, page: 'appeals' as Page })),
   ].slice(0, 3)
-  return <><div className="stats-grid dashboard-stats">{stats.map(({ label, value, target, tone }) => <button className={`stat-card ${tone}`} key={label} onClick={() => onNavigate(target)}><span>{label}</span><strong>{value}</strong></button>)}</div><div className="dashboard-grid"><Card className="dashboard-table"><div className="card-title dashboard-table-title"><h2>학생별 오늘 인증</h2><div className="dashboard-filters"><button className="active">전체</button><button onClick={() => onNavigate('review')}>확인 대기</button><button>승인</button><button>반려</button><button>미제출</button></div></div><div className="table-wrap"><table><thead><tr><th>학생</th><th>구역</th><th>제출</th><th>상태</th></tr></thead><tbody>{reviews.map((item) => <tr key={item.verificationId}><td><b>{item.studentName}</b></td><td>{item.areaName}</td><td>{new Date(item.submittedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</td><td><span className="status status-manual">선생님 확인</span></td></tr>)}{appeals.map((item) => <tr key={`appeal-${item.appealId}`}><td><b>{item.studentName}</b></td><td>{item.areaName}</td><td>—</td><td><span className="status status-appeal">이의신청</span></td></tr>)}{reviews.length + appeals.length === 0 && <tr className="dashboard-empty-row"><td colSpan={4}>오늘 인증 데이터가 없습니다.</td></tr>}</tbody></table></div></Card><div className="dashboard-side"><Card className="attention-card"><CardTitle title="확인이 필요해요" />{latest.length ? latest.map((item, index) => <button key={`${item.type}-${index}`} className={`attention-row ${item.page === 'appeals' ? 'appeal' : ''}`} onClick={() => onNavigate(item.page)}><small>{item.type}</small><b>{item.title}</b><span>{item.detail}</span></button>) : <div className="dashboard-quiet">확인이 필요한 항목이 없어요.</div>}</Card><Card className="week-card"><CardTitle title="이번 주 참여율" detail="제출 / 배정 인원" /><div className="week-empty"><span>—</span><i /><small>참여 데이터 없음</small></div></Card><button className="dashboard-refresh" onClick={onRefresh}>새로고침</button></div></div></>
+  return <><div className="stats-grid dashboard-stats">{stats.map(({ label, value, target, tone }) => <button className={`stat-card ${tone}`} key={label} onClick={() => onNavigate(target)}><span>{label}</span><strong>{value}</strong></button>)}</div><div className="dashboard-grid"><Card className="dashboard-table"><div className="card-title dashboard-table-title"><h2>선생님 확인 대기</h2></div><div className="table-wrap"><table><thead><tr><th>학생</th><th>구역</th><th>제출</th><th>상태</th></tr></thead><tbody>{reviews.map((item) => <tr key={item.verificationId}><td><b>{item.studentName}</b></td><td>{item.areaName}</td><td>{new Date(item.submittedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</td><td><span className="status status-manual">선생님 확인</span></td></tr>)}{reviews.length === 0 && <tr className="dashboard-empty-row"><td colSpan={4}>확인 대기 인증이 없습니다.</td></tr>}</tbody></table></div></Card><div className="dashboard-side"><Card className="attention-card"><CardTitle title="확인이 필요해요" />{latest.length ? latest.map((item, index) => <button key={`${item.type}-${index}`} className={`attention-row ${item.page === 'appeals' ? 'appeal' : ''}`} onClick={() => onNavigate(item.page)}><small>{item.type}</small><b>{item.title}</b><span>{item.detail}</span></button>) : <div className="dashboard-quiet">확인이 필요한 항목이 없어요.</div>}</Card><button className="dashboard-refresh" onClick={onRefresh}>새로고침</button></div></div></>
 }
 
-function Review({ items, selectedId, onSelect, onDecide }: { items: ReviewItem[]; selectedId: number | null; onSelect: (id: number) => void; onDecide: (item: ReviewItem, decision: 'APPROVED' | 'REJECTED', reason?: string) => void }) {
-  const [reason, setReason] = useState('사진에 청소 구역이 잘 보이지 않아요')
+function Review({ items, selectedId, onSelect, onDecide }: { items: ReviewItem[]; selectedId: number | null; onSelect: (id: number) => void; onDecide: (item: ReviewItem, decision: 'APPROVED' | 'REJECTED') => void }) {
   const item = items.find((review) => review.verificationId === selectedId) ?? items[0]
-  return <div className="review-grid"><Card className="review-queue"><div className="queue-heading"><b>확인 대기</b><span>{items.length}건</span></div>{items.map((review) => <button key={review.verificationId} className={`review-item ${item?.verificationId === review.verificationId ? 'active' : ''}`} onClick={() => onSelect(review.verificationId)}><b>{review.studentName} · {review.areaName}</b><span>{review.areaName} · 제출 {new Date(review.submittedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</span><small>{review.reason || review.failReasons.join(' · ') || 'AI 판단을 확인해 주세요.'}</small></button>)}</Card>{item ? <Card className="review-detail"><div className="review-detail-grid"><div className="review-photo-column">{item.photoUrl ? <img className="evidence-picture" src={publicFileUrl(item.photoUrl)} alt={`${item.studentName} 인증 사진`} /> : <div className="evidence-picture">[학생 제출 사진]</div>}<small>촬영 {new Date(item.submittedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })} · 앱 카메라로 촬영됨</small></div><div className="review-info-column"><div className="review-who"><b>{item.studentName} · {item.areaName}</b><small>{item.areaName} · 제출 {new Date(item.submittedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</small></div><div className="review-info-box"><small>AI 판단</small><b>{item.reason || item.failReasons.join(' · ') || 'AI가 자동으로 처리하지 못해 교사 확인이 필요해요.'}</b></div><div className="zone-description review-zone-description"><b>구역 설명</b><p>{item.areaName} 청소 인증 사진을 확인해 주세요.</p></div><div className="reject-reasons"><b>반려할 때 학생에게 보여줄 사유</b>{['사진에 청소 구역이 잘 보이지 않아요', '청소 전 사진 같아요', '다른 장소 사진이에요', '사진이 너무 어두워요'].map((value) => <label key={value}><input type="radio" name="manualRejectReason" checked={reason === value} onChange={() => setReason(value)} />{value}</label>)}</div><div className="decision-actions"><button className="button primary" onClick={() => onDecide(item, 'APPROVED')}>승인 · 10분 적립</button><button className="button secondary" onClick={() => onDecide(item, 'REJECTED', reason)}>반려</button></div></div></div></Card> : <Card><Empty title="검수 대기 인증이 없어요" detail="새로운 인증이 제출되면 여기에 표시돼요." /></Card>}</div>
+  return <div className="review-grid"><Card className="review-queue"><div className="queue-heading"><b>확인 대기</b><span>{items.length}건</span></div>{items.map((review) => <button key={review.verificationId} className={`review-item ${item?.verificationId === review.verificationId ? 'active' : ''}`} onClick={() => onSelect(review.verificationId)}><b>{review.studentName} · {review.areaName}</b><span>{review.areaName} · 제출 {new Date(review.submittedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</span><small>{review.reason || review.failReasons.join(' · ') || 'AI 판단을 확인해 주세요.'}</small></button>)}</Card>{item ? <Card className="review-detail"><div className="review-detail-grid"><div className="review-photo-column">{item.photoUrl ? <img className="evidence-picture" src={publicFileUrl(item.photoUrl)} alt={`${item.studentName} 인증 사진`} /> : <div className="evidence-picture">[학생 제출 사진]</div>}<small>촬영 {new Date(item.submittedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })} · 앱 카메라로 촬영됨</small></div><div className="review-info-column"><div className="review-who"><b>{item.studentName} · {item.areaName}</b><small>{item.areaName} · 제출 {new Date(item.submittedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</small></div><div className="review-info-box"><small>AI 판단</small><b>{item.reason || item.failReasons.join(' · ') || 'AI가 자동으로 처리하지 못해 교사 확인이 필요해요.'}</b></div><div className="zone-description review-zone-description"><b>구역 설명</b><p>{item.areaName} 청소 인증 사진을 확인해 주세요.</p></div><div className="decision-actions"><button className="button primary" onClick={() => onDecide(item, 'APPROVED')}>승인 · 10분 적립</button><button className="button secondary" onClick={() => onDecide(item, 'REJECTED')}>반려</button></div></div></div></Card> : <Card><Empty title="검수 대기 인증이 없어요" detail="새로운 인증이 제출되면 여기에 표시돼요." /></Card>}</div>
 }
 
 function Appeals({ items, selectedId, onSelect, onDecide }: { items: Appeal[]; selectedId: number | null; onSelect: (id: number) => void; onDecide: (item: Appeal, decision: 'APPROVED' | 'REJECTED', reply: string) => void }) {
@@ -279,24 +289,47 @@ function Recruitment({ items, onApplicants, onEdit }: { items: Recruitment[]; on
 
 function Applicants({ id, items, onBack }: { id: number; items: Applicant[]; onBack: () => void }) { return <><button className="text-button" onClick={onBack}>← 모집 목록</button><Card className="applicant-list"><CardTitle title={`모집 #${id} 신청자`} detail={`${items.length}명 · 신청 순서대로 표시`} />{items.map((item) => <div className="applicant-row" key={item.applicationId}><span className="order-badge">{item.order}</span><span>{item.studentNumber ?? '-'}</span><b>{item.name}</b><span>{item.motivation}</span></div>)}{!items.length && <Empty title="신청자가 없어요" detail="학생이 신청하면 순서대로 표시됩니다." />}</Card></> }
 
-function Zones({ areas, onToggle, onAssign }: { areas: Area[]; onToggle: (area: Area) => void; onAssign: (area: Area) => void }) {
-  const floors = ['본관 1층', '본관 2층', '본관 3층', '별관 1층']
-  const [floor, setFloor] = useState('본관 2층'); const [selectedId, setSelectedId] = useState<number | null>(null)
-  const floorNumber = floor === '본관 1층' ? '1' : floor === '본관 2층' ? '2' : floor === '본관 3층' ? '3' : '별'
+function Zones({ areas, onToggle, onAssign, onRemove }: { areas: Area[]; onToggle: (area: Area) => void; onAssign: (area: Area) => void; onRemove: (area: Area, student: Area['assignedStudents'][number]) => Promise<void> }) {
+  const floors = ['본관 1층', '본관 2층', '본관 3층', '본관 4층', '별관 1층', '계단 구역']
+  const [floor, setFloor] = useState('본관 2층')
+  const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [removingStudent, setRemovingStudent] = useState<Area['assignedStudents'][number] | null>(null)
+  const [removing, setRemoving] = useState(false)
+  const floorNumber = floor === '본관 1층' ? '1' : floor === '본관 2층' ? '2' : floor === '본관 3층' ? '3' : floor === '본관 4층' ? '4' : floor === '계단 구역' ? 'stairs' : '별'
   const filtered = areas.filter((area) => {
     const code = area.zoneCode.toLowerCase()
-    if (floorNumber === '별') return code.startsWith('practice_')
-    if (code.startsWith('main_stair_') || code.startsWith('geumbong_stair_')) return true
+    if (floorNumber === '별') return code.startsWith('practice_') && !code.includes('_stair_')
+    if (floorNumber === 'stairs') return code.includes('_stair_')
     if (floorNumber === '1' && code.startsWith('main_entrance_')) return true
     return code.endsWith(`f${floorNumber}`)
   })
   const selected = filtered.find((area) => area.areaId === selectedId) ?? filtered[0]
-  return <><div className="floor-tabs page-floor-tabs">{floors.map((item) => <button key={item} className={floor === item ? 'active' : ''} onClick={() => { setFloor(item); setSelectedId(null) }}>{item}</button>)}</div><div className="zone-layout"><Card><div className="zone-grid">{filtered.map((area, index) => <button key={area.areaId} className={`zone-tile ${area.isActive ? 'on' : 'off'} ${selected?.areaId === area.areaId ? 'picked' : ''}`} onClick={() => setSelectedId(area.areaId)}><span className="zone-index">{String(index + 1).padStart(2, '0')}</span><b>{area.name}</b><small>{area.isActive ? `청소 구역　${area.assignedStudents.length}명` : '청소 안 함'}</small></button>)}</div><div className="legend"><span><i className="legend-active" />청소 구역</span><span><i className="legend-off" />청소 안 함</span><span><i className="legend-picked" />선택됨</span></div></Card>{selected && <Card className="zone-detail"><div className="zone-detail-title"><h2>{selected.name}</h2><label>청소 구역<button className={`switch ${selected.isActive ? 'checked' : ''}`} aria-label="구역 활성화" onClick={() => onToggle(selected)}><i /></button></label></div><div className="zone-description"><b>구역 안내</b><p>{selected.description || '구역 안내가 등록되지 않았습니다.'}</p>{selected.cleanTime && <small>활동 시간 {selected.cleanTime}</small>}</div><div className="assigned-heading"><b>담당 학생</b><span>{selected.assignedStudents.length}명</span></div>{selected.assignedStudents.map((student) => <div className="assigned-student" key={student.studentId}><span><b>{student.name}</b><small> · {student.studentNumber ?? ''}</small></span></div>)}{!selected.assignedStudents.length && <p className="muted empty-inline">배정된 학생이 없습니다.</p>}<button className="button secondary full-button" disabled={!selected.isActive} onClick={() => onAssign(selected)}>＋ 학생 배정</button><button className="button primary zone-save">저장</button></Card>}</div>{areas.length > 0 && filtered.length === 0 && <Empty title={`${floor} 구역이 없어요`} detail="서버에 등록된 구역 이름에 층 정보가 있는지 확인해 주세요." />}</>
+  async function confirmRemove() {
+    if (!selected || !removingStudent) return
+    setRemoving(true)
+    try { await onRemove(selected, removingStudent); setRemovingStudent(null) } catch { /* The page displays the API error and keeps the confirmation open. */ } finally { setRemoving(false) }
+  }
+  return <>
+    <div className="floor-tabs page-floor-tabs">{floors.map((item) => <button key={item} className={floor === item ? 'active' : ''} onClick={() => { setFloor(item); setSelectedId(null) }}>{item}</button>)}</div>
+    <div className="zone-layout">
+      <Card><div className="zone-grid">{filtered.map((area, index) => <button key={area.areaId} className={`zone-tile ${area.isActive ? 'on' : 'off'} ${selected?.areaId === area.areaId ? 'picked' : ''}`} onClick={() => setSelectedId(area.areaId)}><span className="zone-index">{String(index + 1).padStart(2, '0')}</span><b>{area.name}</b><small>{area.isActive ? `청소 구역　${area.assignedStudents.length}명` : '청소 안 함'}</small></button>)}</div><div className="legend"><span><i className="legend-active" />청소 구역</span><span><i className="legend-off" />청소 안 함</span><span><i className="legend-picked" />선택됨</span></div></Card>
+      {selected && <Card className="zone-detail">
+        <div className="zone-detail-title"><h2>{selected.name}</h2><label>청소 구역<button className={`switch ${selected.isActive ? 'checked' : ''}`} aria-label="구역 활성화" onClick={() => onToggle(selected)}><i /></button></label></div>
+        <div className="zone-description"><b>구역 안내</b><p>{selected.description || '구역 안내가 등록되지 않았습니다.'}</p>{selected.cleanTime && <small>활동 시간 {selected.cleanTime}</small>}</div>
+        <div className="assigned-heading"><b>담당 학생</b><span>{selected.assignedStudents.length}명</span></div>
+        {selected.assignedStudents.map((student) => <div className="assigned-student" key={student.studentId}><span><b>{student.name}</b><small> · {student.studentNumber ?? ''}</small></span><button type="button" className="remove-student" disabled={removing} onClick={() => setRemovingStudent(student)}>배정 해제</button></div>)}
+        {!selected.assignedStudents.length && <p className="muted empty-inline">배정된 학생이 없습니다.</p>}
+        <button className="button secondary full-button" disabled={!selected.isActive} onClick={() => onAssign(selected)}>＋ 학생 배정</button>
+      </Card>}
+    </div>
+    {areas.length > 0 && filtered.length === 0 && <Empty title={`${floor} 구역이 없어요`} detail="서버에 등록된 구역 이름에 층 정보가 있는지 확인해 주세요." />}
+    {removingStudent && selected && <Modal title="학생 배정 해제" onClose={() => { if (!removing) setRemovingStudent(null) }}><div className="unassign-dialog"><p><b>{removingStudent.name}</b> 학생을 <b>{selected.name}</b>에서 배정 해제할까요?</p><small>해제하면 학생 앱에서 담당 구역으로 표시되지 않습니다.</small><div className="modal-actions"><button type="button" className="button secondary" disabled={removing} onClick={() => setRemovingStudent(null)}>취소</button><button type="button" className="button notice-delete-button" disabled={removing} onClick={() => void confirmRemove()}>{removing ? '해제 중…' : '배정 해제'}</button></div></div></Modal>}
+  </>
 }
 
 function Activity({ students, keyword, onSearch, sort, onSort, onSelect }: { students: StudentActivity[]; keyword: string; onSearch: (value: string) => void; sort: string; onSort: (value: string) => void; onSelect: (student: StudentActivity) => void }) {
-  const sorted = [...students].sort((a, b) => sort === '활동 시간순' ? b.totalMinutes - a.totalMinutes : sort === '미제출 많은 순' ? a.name.localeCompare(b.name, 'ko') : a.name.localeCompare(b.name, 'ko'))
-  return <Card className="activity-list"><div className="activity-toolbar"><label className="search-box"><span>⌕</span><input value={keyword} onChange={(e) => onSearch(e.target.value)} placeholder="이름이나 학번으로 찾기" /></label><div className="sort-pills">{['이름순', '활동 시간순', '미제출 많은 순'].map((item) => <button key={item} className={sort === item ? 'active' : ''} onClick={() => onSort(item)}>{item}</button>)}</div></div>{students.length ? <div className="table-wrap"><table><thead><tr><th>학생</th><th>구역</th><th>승인</th><th>반려</th><th>미제출</th><th>활동 시간</th><th>최근 인증</th></tr></thead><tbody>{sorted.map((student) => <tr key={student.studentId}><td><b>{student.name}</b><small> · {student.studentNumber ?? '학번 없음'}</small></td><td>{student.area ?? '미배정'}</td><td><b className="approved-count">{student.attendanceDays}회</b></td><td>—</td><td>—</td><td><b>{student.totalMinutes}분</b></td><td><button className="recent-link" onClick={() => onSelect(student)}>최근 기록 ›</button></td></tr>)}</tbody></table></div> : <Empty title="검색 결과가 없어요" detail="다른 이름이나 학번으로 검색해 주세요." />}</Card>
+  const sorted = [...students].sort((a, b) => sort === '활동 시간순' ? b.totalMinutes - a.totalMinutes : a.name.localeCompare(b.name, 'ko'))
+  return <Card className="activity-list"><div className="activity-toolbar"><label className="search-box"><span>⌕</span><input value={keyword} onChange={(e) => onSearch(e.target.value)} placeholder="이름이나 학번으로 찾기" /></label><div className="sort-pills">{['이름순', '활동 시간순'].map((item) => <button key={item} className={sort === item ? 'active' : ''} onClick={() => onSort(item)}>{item}</button>)}</div></div>{students.length ? <div className="table-wrap"><table><thead><tr><th>학생</th><th>구역</th><th>승인</th><th>활동 시간</th><th>최근 인증</th></tr></thead><tbody>{sorted.map((student) => <tr key={student.studentId}><td><b>{student.name}</b><small> · {student.studentNumber ?? '학번 없음'}</small></td><td>{student.area ?? '미배정'}</td><td><b className="approved-count">{student.attendanceDays}회</b></td><td><b>{student.totalMinutes}분</b></td><td><button className="recent-link" onClick={() => onSelect(student)}>최근 기록 ›</button></td></tr>)}</tbody></table></div> : <Empty title="검색 결과가 없어요" detail="다른 이름이나 학번으로 검색해 주세요." />}</Card>
 }
 
 function StudentDetail({ student, month, selectedMonth, onBack }: { student: StudentActivity; month: StudentMonth | null; selectedMonth: Date; onBack: () => void }) {
@@ -304,23 +337,38 @@ function StudentDetail({ student, month, selectedMonth, onBack }: { student: Stu
 }
 function translateResult(result: string) { return ({ APPROVED: '승인', REJECTED: '반려', PROCESSING: '검수 중', MANUAL_REVIEW: '수동 검토', NOT_SUBMITTED: '미제출', UPCOMING: '예정' } as Record<string, string>)[result] ?? result }
 
-function Notices({ items, detail, selectedId, onSelect, onSave, onDelete }: { items: Notice[]; detail: NoticeDetail | null; selectedId: number | null; onSelect: (id: number) => void; onSave: (detail: NoticeDetail) => void; onDelete: (id: number) => void }) {
+function Notices({ items, detail, selectedId, onSelect, onSave, onDelete }: { items: Notice[]; detail: NoticeDetail | null; selectedId: number | null; onSelect: (id: number) => void; onSave: (detail: NoticeDetail) => void; onDelete: (id: number) => Promise<void> }) {
   const [drafts, setDrafts] = useState<Record<number, NoticeDetail>>({})
+  const [confirmingDelete, setConfirmingDelete] = useState(() => import.meta.env.DEV && new URLSearchParams(window.location.search).get('admin-preview') === 'notice-delete')
+  const [deleting, setDeleting] = useState(false)
   const draft = detail ? drafts[detail.noticeId] ?? detail : null
-  return <div className="notice-layout"><Card className="notice-list"><div className="notice-items">{items.map((item) => <button key={item.noticeId} className={`notice-row ${selectedId === item.noticeId ? 'active' : ''}`} onClick={() => onSelect(item.noticeId)}><span><b>{item.title}</b><small>{new Date(item.createdAt).toLocaleDateString('ko-KR')} · {item.isRead ? '읽음' : '안 읽음'}</small></span></button>)}{!items.length && <Empty title="등록된 공지가 없어요" detail="새 공지를 작성해 주세요." />}</div></Card>{draft ? <Card className="notice-detail"><label className="notice-field"><b>제목</b><input value={draft.title} onChange={(e) => setDrafts((current) => ({ ...current, [draft.noticeId]: { ...draft, title: e.target.value } }))} /></label><label className="notice-field notice-body-field"><b>내용</b><textarea value={draft.content} onChange={(e) => setDrafts((current) => ({ ...current, [draft.noticeId]: { ...draft, content: e.target.value } }))} /></label><div className="notice-editor-actions"><button className="button secondary" onClick={() => onDelete(draft.noticeId)}>삭제</button><button className="button primary" onClick={() => onSave(draft)}>저장하고 올리기</button></div></Card> : <Card className="notice-detail"><Empty title="공지를 선택해 주세요" detail="새 공지를 작성하거나 목록에서 선택해 주세요." /></Card>}</div>
+  return <>
+    <div className="notice-layout"><Card className="notice-list"><div className="notice-items">{items.map((item) => <button key={item.noticeId} className={`notice-row ${selectedId === item.noticeId ? 'active' : ''}`} onClick={() => onSelect(item.noticeId)}><span><b>{item.title}</b><small>{new Date(item.createdAt).toLocaleDateString('ko-KR')} · {item.isRead ? '읽음' : '안 읽음'}</small></span></button>)}{!items.length && <Empty title="등록된 공지가 없어요" detail="새 공지를 작성해 주세요." />}</div></Card>{draft ? <Card className="notice-detail"><label className="notice-field"><b>제목</b><input value={draft.title} onChange={(e) => setDrafts((current) => ({ ...current, [draft.noticeId]: { ...draft, title: e.target.value } }))} /></label><label className="notice-field notice-body-field"><b>내용</b><textarea value={draft.content} onChange={(e) => setDrafts((current) => ({ ...current, [draft.noticeId]: { ...draft, content: e.target.value } }))} /></label><div className="notice-editor-actions"><button className="button secondary" onClick={() => setConfirmingDelete(true)}>삭제</button><button className="button primary" onClick={() => onSave(draft)}>저장하고 올리기</button></div></Card> : <Card className="notice-detail"><Empty title="공지를 선택해 주세요" detail="새 공지를 작성하거나 목록에서 선택해 주세요." /></Card>}</div>
+    {confirmingDelete && draft && <Modal title="정말 삭제하시겠어요?" onClose={() => { if (!deleting) setConfirmingDelete(false) }}>
+      <div className="notice-delete-dialog">
+        <p>삭제한 공지는 복구할 수 없어요.</p>
+        <span className="notice-delete-icon" aria-hidden="true">!</span>
+        <div className="notice-delete-name">삭제 대상: {draft.title}</div>
+        <div className="modal-actions">
+          <button className="button secondary" type="button" onClick={() => setConfirmingDelete(false)} disabled={deleting}>취소</button>
+          <button className="button notice-delete-button" type="button" disabled={deleting} onClick={async () => { setDeleting(true); try { await onDelete(draft.noticeId); setConfirmingDelete(false) } catch { /* Keep the confirmation open when the delete request fails. */ } finally { setDeleting(false) } }}>{deleting ? '삭제 중…' : '삭제하기'}</button>
+        </div>
+      </div>
+    </Modal>}
+  </>
 }
 
 function RecruitmentForm({ initial, onSubmit }: { initial: Recruitment | null; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void }) {
   return <form onSubmit={onSubmit}><div className="form-grid"><label>학기<select name="semester" defaultValue={initial?.semester ?? '2026-2'} disabled={Boolean(initial)}><option value="2026-1">2026학년도 1학기</option><option value="2026-2">2026학년도 2학기</option></select></label><label>학년<select name="grade" defaultValue={initial?.grade ?? 2} disabled={Boolean(initial)}>{[1, 2, 3].map((n) => <option key={n} value={n}>{n}학년</option>)}</select></label><label>반<input name="classNo" type="number" min="1" max="12" defaultValue={initial?.classNo ?? 1} required disabled={Boolean(initial)} /></label><label>모집 인원 (최대 6명)<input name="maxCount" type="number" min="1" max="6" defaultValue={initial?.maxCount ?? 6} required /></label><label>모집 시작일<input name="startDate" type="date" defaultValue={initial?.period.start.slice(0, 10)} required /></label><label>모집 종료일<input name="endDate" type="date" defaultValue={initial?.period.end.slice(0, 10)} required /></label></div><div className="modal-actions"><button className="button secondary" type="button" onClick={() => window.dispatchEvent(new Event('close-modal'))}>취소</button><button className="button primary">{initial ? '수정 저장' : '등록하기'}</button></div></form>
 }
-function AssignmentForm({ areas, selectedArea, onSubmit }: { areas: Area[]; selectedArea?: Area; onSubmit: (event: React.FormEvent<HTMLFormElement>) => void }) {
-  const [keyword, setKeyword] = useState(''); const [matches, setMatches] = useState<StudentActivity[]>([]); const [searching, setSearching] = useState(false)
+function AssignmentForm({ areas, selectedArea, onSubmit }: { areas: Area[]; selectedArea?: Area; onSubmit: (event: React.FormEvent<HTMLFormElement>, studentIds: number[]) => void }) {
+  const [keyword, setKeyword] = useState(''); const [matches, setMatches] = useState<StudentActivity[]>([]); const [searching, setSearching] = useState(false); const [selectedStudentIds, setSelectedStudentIds] = useState<number[]>([])
   useEffect(() => { const timer = setTimeout(() => { setSearching(true); api.searchStudents(keyword).then(setMatches).catch(() => setMatches([])).finally(() => setSearching(false)) }, 250); return () => clearTimeout(timer) }, [keyword])
-  return <form onSubmit={onSubmit}><div className="callout">한 구역에 여러 학생을 배정할 수 있습니다. 학생은 한 구역만 담당할 수 있어요.</div><label>청소구역<select name="areaId" defaultValue={selectedArea?.areaId}>{areas.filter((area) => area.isActive).map((area) => <option key={area.areaId} value={area.areaId}>{area.name}</option>)}</select></label><label>학생 검색<input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="이름 또는 학번" /></label><div className="assign-student-options">{searching ? '검색 중…' : matches.map((student) => <label key={student.studentId}><input type="checkbox" name="studentId" value={student.studentId} /><span>{student.name} · {student.studentNumber ?? '학번 없음'}{student.area ? ` · 현재 ${student.area}` : ''}</span></label>)}{!searching && !matches.length && <small>학생 검색 결과가 없습니다.</small>}</div><div className="modal-actions"><button type="button" className="button secondary" onClick={() => window.dispatchEvent(new Event('close-modal'))}>취소</button><button className="button primary">배정하기</button></div></form>
+  return <form onSubmit={(event) => onSubmit(event, selectedStudentIds)}><div className="callout">한 구역에 여러 학생을 배정할 수 있습니다. 학생은 한 구역만 담당할 수 있어요.</div><label>청소구역<select name="areaId" defaultValue={selectedArea?.areaId}>{areas.filter((area) => area.isActive).map((area) => <option key={area.areaId} value={area.areaId}>{area.name}</option>)}</select></label><label>학생 검색<input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="이름 또는 학번" /></label><div className="assign-student-options">{searching ? '검색 중…' : matches.map((student) => <label key={student.studentId}><input type="checkbox" checked={selectedStudentIds.includes(student.studentId)} onChange={(event) => setSelectedStudentIds((current) => event.target.checked ? [...new Set([...current, student.studentId])] : current.filter((id) => id !== student.studentId))} /><span>{student.name} · {student.studentNumber ?? '학번 없음'}{student.area ? ` · 현재 ${student.area}` : ''}</span></label>)}{!searching && !matches.length && <small>학생 검색 결과가 없습니다.</small>}</div><div className="modal-actions"><button type="button" className="button secondary" onClick={() => window.dispatchEvent(new Event('close-modal'))}>취소</button><button className="button primary">배정하기</button></div></form>
 }
 function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
   useEffect(() => { const close = () => onClose(); window.addEventListener('close-modal', close); return () => window.removeEventListener('close-modal', close) }, [onClose])
-  return <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}><section className="modal" role="dialog" aria-modal="true"><div className="modal-head"><div><h2>{title}</h2></div><button className="icon-btn" onClick={onClose}>×</button></div>{children}</section></div>
+  return <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div className="modal-head"><div><h2 id="modal-title">{title}</h2></div><button className="icon-btn" onClick={onClose}>×</button></div>{children}</section></div>
 }
 
 function exportStudentsCsv(students: StudentActivity[]) {

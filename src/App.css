@@ -21,4 +21,191 @@
 @media(max-width:760px){.dashboard-page-title{min-height:0}.dashboard-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.dashboard-grid{grid-template-columns:1fr}.dashboard-table-title{height:auto;min-height:60px;flex-wrap:wrap;padding:12px}.dashboard-filters{flex-wrap:wrap}.sidebar{padding:10px 12px}.nav-icon{display:none}}
 @media(max-width:900px){.admin-login-screen{grid-template-columns:minmax(300px,42%) minmax(0,1fr)}.login-brand-panel{padding:40px}.login-form-panel{padding:28px}}
 @media(max-width:620px){.admin-login-screen{grid-template-columns:1fr}.login-brand-panel{height:auto;min-height:240px;padding:24px 24px 28px;gap:30px}.login-hero h1{font-size:28px}.login-hero p{margin-top:10px}.login-footer{display:none}.login-form-panel{height:auto;min-height:360px;padding:32px 24px;align-items:flex-start}.login-form-content{width:100%}}
+.notice-delete-dialog{display:flex;flex-direction:column;align-items:stretch;text-align:left;padding:6px 6px 2px}
+.notice-delete-icon{display:grid;place-items:center;align-self:center;width:48px;height:48px;margin:20px 0 18px;border-radius:50%;background:#fff0ee;color:#c8544b;font-size:24px;font-weight:700}
+.notice-delete-dialog>p{margin:0;color:#696c6d;font-size:12px;line-height:1.6}
+.notice-delete-name{width:100%;margin:0 0 22px;color:#202720;font-size:12px;line-height:1.5;overflow-wrap:anywhere}
+.notice-delete-dialog .modal-actions{width:100%;margin-top:0;gap:10px}
+.notice-delete-dialog .modal-actions .button{flex:1}
+.button.notice-delete-button{border-color:#d94e45;background:#d94e45;color:#fff}
+.button.notice-delete-button:hover:not(:disabled){border-color:#c64139;background:#c64139}
+.button:disabled{cursor:wait;opacity:.65}
 .recruitment-callout{height:122px;margin:10px 0 22px;padding:24px;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:10px;background:#edf8eb;border-color:#edf8eb;border-radius:7px}.recruitment-callout b{font-size:14px;color:#151817}.recruitment-callout small{font-size:12px;color:#696c6d}.recruitment-list{height:496px;padding:24px 16px;overflow:hidden}.recruitment-columns,.recruitment-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr) minmax(0,1.5fr) minmax(0,1fr) minmax(0,1fr);align-items:center}.recruitment-columns{height:30px;padding:0 12px;color:#696c6d;font-size:12px}.recruitment-row{height:64px;margin:10px 0 12px;padding:0 12px;border:1px solid #e3e5e4;border-radius:5px;color:#202720;font-size:12px}.row-semester{border:0;background:transparent;padding:0;text-align:left;color:#202720;font-size:12px}.recruitment-row .text-button{justify-self:start;font-size:12px;padding:3px;white-space:nowrap}.applicant-filter{height:86px;margin:10px 0 20px;padding:18px 24px;display:grid;grid-template-columns:200px repeat(3,minmax(0,1fr));align-items:center;gap:10px}.filter-label{font-size:14px;color:#353d36}.applicant-filter select{height:42px;min-width:0;border:1px solid #e3e5e4;border-radius:5px;background:white;padding:0 12px;color:#424a43;font-size:12px}.applicant-list{height:394px;padding:0;overflow:hidden}.applicant-columns,.applicant-row{display:grid;grid-template-columns:minmax(0,164fr) minmax(0,220fr) minmax(0,240fr) minmax(0,420fr);align-items:center;padding:0 24px}.applicant-columns{height:64px;border-bottom:1px solid #e3e5e4;color:#696c6d;font-size:12px}.applicant-row{height:68px;border-bottom:1px solid #e3e5e4;color:#404840;font-size:12px}.applicant-row b{font-weight:600;color:#202720}.applicant-row .order-badge{border-radius:50%;width:25px;height:25px}
+
+/* Cleaning area detail sizing and student unassignment */
+.zone-layout{grid-template-columns:minmax(0,1.55fr) minmax(340px,.95fr);gap:20px}
+.zone-grid{padding:22px;gap:12px}
+.zone-tile{height:108px;min-height:108px;padding:15px 16px}
+.zone-tile b{font-size:14px}
+.zone-tile small,.zone-index{font-size:12px}
+.legend{padding:0 22px 18px;font-size:12px}
+.zone-detail{padding:24px;gap:0}
+.zone-detail-title h2{font-size:18px}
+.zone-detail-title label{font-size:14px}
+.zone-description{padding:20px 0 24px}
+.zone-description b,.assigned-heading b{font-size:14px}
+.zone-description p{font-size:14px;line-height:1.6;margin:9px 0}
+.zone-description small{font-size:12px}
+.assigned-heading{margin-bottom:10px}
+.assigned-student{height:auto;min-height:50px;padding:6px 8px;gap:10px;font-size:14px}
+.assigned-student small{font-size:13px;color:#696c6d}
+.assigned-student .remove-student{height:32px;padding:0 10px;border:1px solid #e3e5e4;border-radius:6px;background:#fff;color:#bd5148;font-size:12px;white-space:nowrap}
+.assigned-student .remove-student:hover:not(:disabled){background:#fff3f1;border-color:#e8b9b4}
+.zone-detail .full-button{height:48px;margin:14px 0 0}
+.unassign-dialog{display:flex;flex-direction:column;gap:12px}
+.unassign-dialog p{margin:0;color:#303832;font-size:15px;line-height:1.6}
+.unassign-dialog small{color:#696c6d;font-size:13px;line-height:1.5}
+.unassign-dialog .modal-actions{margin-top:10px}
+@media(max-width:760px){.zone-layout{grid-template-columns:1fr;gap:14px}.zone-detail{min-height:0}.zone-grid{padding:14px;gap:10px}.zone-tile{height:96px;min-height:96px;padding:12px}}
+
+/* Admin screens: shared scale aligned to the 1440px Figma frames */
+.app-shell .page-content{max-width:1440px;padding:44px 36px 56px}
+.app-shell .page-title-row{margin-bottom:28px;gap:20px}
+.app-shell h1{font-size:28px;line-height:1.3;letter-spacing:-.5px}
+.app-shell .dashboard-page-title h1{font-size:24px;line-height:1.35}
+.app-shell .page-subtitle{font-size:14px;line-height:1.6;margin-top:8px}
+.app-shell .card{padding:24px;border-radius:12px;margin-bottom:18px}
+.app-shell .card-title{margin-bottom:20px;gap:16px}
+.app-shell .card-title h2{font-size:16px}
+.app-shell .card-title p{font-size:12px;line-height:1.5}
+.app-shell .button{min-height:44px;height:44px;padding:0 18px;border-radius:8px;font-size:14px}
+.app-shell .small-button{min-height:36px;height:36px;padding:0 13px;font-size:12px}
+.app-shell .text-button{font-size:13px;padding:7px}
+.app-shell .inline-alert{padding:14px 16px;font-size:13px;margin:-8px 0 18px}
+.app-shell .loading-line{font-size:13px;margin:-10px 0 14px}
+.app-shell .empty-state{min-height:190px;padding:30px}
+.app-shell .empty-state>span{width:46px;height:46px;font-size:25px;margin-bottom:13px}
+.app-shell .empty-state b{font-size:14px}
+.app-shell .empty-state p{font-size:12px;line-height:1.6}
+.app-shell .status{font-size:11px;padding:5px 10px}
+.app-shell th{font-size:12px;padding:13px 14px}
+.app-shell td{font-size:13px;padding:14px}
+.app-shell td small{font-size:11px}
+.app-shell .table-wrap table{min-width:620px}
+.app-shell .callout{padding:16px;font-size:12px;line-height:1.7}
+.app-shell .wide-callout{gap:14px;margin-bottom:18px;padding:18px}
+.app-shell .wide-callout b{font-size:13px}
+.app-shell .wide-callout small{font-size:12px;line-height:1.6}
+.app-shell .dashboard-stats{gap:14px;margin-bottom:24px}
+.app-shell .dashboard-stats .stat-card{height:104px;padding:18px 20px}
+.app-shell .dashboard-stats .stat-card span{font-size:13px}
+.app-shell .dashboard-stats .stat-card strong{font-size:26px;line-height:1.25;margin-top:8px}
+.app-shell .dashboard-grid{gap:22px}
+.app-shell .dashboard-table{min-height:620px;height:auto}
+.app-shell .dashboard-table-title{min-height:76px;padding:0 26px}
+.app-shell .dashboard-table-title h2{font-size:16px}
+.app-shell .dashboard-filters button{height:38px;padding:0 14px;font-size:13px}
+.app-shell .dashboard-table th{font-size:12px;padding:12px 20px}
+.app-shell .dashboard-table td{font-size:13px;height:56px;padding:11px 20px}
+.app-shell .dashboard-table td b{font-size:13px}
+.app-shell .attention-row{min-height:80px;padding:0 12px}
+.app-shell .attention-row small{font-size:12px}
+.app-shell .attention-row b,.app-shell .attention-row span{font-size:13px}
+.app-shell .dashboard-quiet{font-size:13px;padding:20px 12px}
+.app-shell .review-grid{grid-template-columns:minmax(300px,.85fr) minmax(460px,1.5fr);gap:20px}
+.app-shell .review-item{gap:12px;padding:13px 10px}
+.app-shell .review-item b{font-size:13px}
+.app-shell .review-item span:not(.status){font-size:12px}
+.app-shell .review-item>div:nth-child(2)>small{font-size:11px}
+.app-shell .photo-thumb{width:56px;height:54px}
+.app-shell .review-grid .card{padding:24px}
+.app-shell .evidence{gap:22px}
+.app-shell .evidence-picture{height:320px}
+.app-shell .evidence-picture small{font-size:12px}
+.app-shell .evidence-meta{gap:18px}
+.app-shell .evidence-meta small,.app-shell .detail-line small{font-size:12px}
+.app-shell .evidence-meta b,.app-shell .detail-line>b{font-size:13px}
+.app-shell .decision-actions{gap:10px;margin-top:20px;padding-top:18px}
+.app-shell .appeal-list{gap:12px;padding:14px 10px}
+.app-shell .appeal-list b{font-size:13px}
+.app-shell .appeal-list b small,.app-shell .appeal-list>span:nth-child(2)>small{font-size:11px}
+.app-shell .appeal-evidence{gap:20px}
+.app-shell .appeal-evidence>div:nth-child(2){gap:15px}
+.app-shell .detail-line{grid-template-columns:84px 1fr}
+.app-shell .callout p{font-size:13px}
+.app-shell .recruitment-callout{min-height:126px;height:auto;padding:24px;margin:12px 0 24px}
+.app-shell .recruitment-callout b{font-size:16px}
+.app-shell .recruitment-callout small{font-size:14px;line-height:1.6}
+.app-shell .recruitment-list{min-height:496px;height:auto;padding:28px 20px;overflow:auto}
+.app-shell .recruitment-columns{height:38px;font-size:13px;padding:0 14px}
+.app-shell .recruitment-row{min-height:70px;height:auto;margin:12px 0;padding:12px 14px;font-size:13px}
+.app-shell .row-semester,.app-shell .recruitment-row .text-button{font-size:13px}
+.app-shell .applicant-list{min-height:394px;height:auto;overflow:auto}
+.app-shell .applicant-columns{height:68px;font-size:13px}
+.app-shell .applicant-row{min-height:72px;height:auto;padding-top:12px;padding-bottom:12px;font-size:13px}
+.app-shell .order-badge{width:28px;height:28px;font-size:12px}
+.app-shell .applicant-filter{min-height:90px;height:auto;margin:12px 0 22px;padding:20px 24px;gap:12px}
+.app-shell .filter-label{font-size:15px}
+.app-shell .applicant-filter select{height:44px;font-size:13px}
+.app-shell .activity-toolbar{min-height:52px;margin-bottom:16px}
+.app-shell .search-box{height:42px;padding:0 12px;gap:8px;font-size:16px}
+.app-shell .search-box input{width:230px;font-size:13px}
+.app-shell .filter-pills button{padding:9px 13px;font-size:12px}
+.app-shell .activity-list{min-height:500px}
+.app-shell .activity-list table{min-width:760px}
+.app-shell .activity-detail .student-detail-head{margin:24px 0}
+.app-shell .student-detail-head h2{font-size:21px}
+.app-shell .student-detail-head p{font-size:14px}
+.app-shell .notice-layout{grid-template-columns:minmax(340px,400px) minmax(0,1fr);gap:22px}
+.app-shell .notice-layout>.card{min-height:600px;height:auto}
+.app-shell .notice-row{min-height:76px;height:auto;padding:14px 20px}
+.app-shell .notice-row b{font-size:14px}
+.app-shell .notice-row small{font-size:12px}
+.app-shell .notice-detail{padding:24px}
+.app-shell .notice-detail h2{font-size:22px;margin:28px 0 10px}
+.app-shell .notice-date{font-size:12px}
+.app-shell .notice-body{font-size:14px;line-height:1.8}
+.app-shell .notice-pager{padding-top:18px}
+.app-shell .notice-pager button{font-size:13px}
+.app-shell .modal{padding:28px;border-radius:14px}
+.app-shell .modal-head{margin-bottom:24px}
+.app-shell .modal-head h2{font-size:21px}
+.app-shell .modal label{font-size:12px}
+.app-shell .modal input,.app-shell .modal select,.app-shell .modal textarea{min-height:46px;font-size:13px;padding:11px 13px}
+.app-shell .modal-actions{gap:10px;margin-top:18px}
+.app-shell .form-error{font-size:12px;padding:11px}
+.app-shell .login-card{width:min(100%,480px);padding:40px;gap:20px}
+.app-shell .login-card h1{font-size:27px}
+.app-shell .login-card>p{font-size:15px}
+.app-shell .login-card label{font-size:14px}
+.app-shell .login-card input{min-height:46px;font-size:14px}
+.app-shell .auth-message{font-size:16px}
+
+@media(max-width:1100px){
+  .app-shell .page-content{padding:34px 24px 48px}
+  .app-shell .review-grid{grid-template-columns:minmax(270px,.8fr) minmax(0,1.4fr);gap:16px}
+  .app-shell .notice-layout{grid-template-columns:minmax(300px,.8fr) minmax(0,1.4fr);gap:16px}
+  .app-shell .dashboard-grid{grid-template-columns:minmax(0,2fr) minmax(250px,1fr);gap:16px}
+  .app-shell .dashboard-stats .stat-card{padding:16px}
+}
+@media(max-width:760px){
+  .app-shell .page-content{padding:26px 16px 40px}
+  .app-shell .page-title-row{margin-bottom:20px;gap:12px;flex-wrap:wrap}
+  .app-shell h1{font-size:24px}
+  .app-shell .page-subtitle{font-size:13px}
+  .app-shell .card{padding:18px;margin-bottom:14px}
+  .app-shell .card-title h2{font-size:15px}
+  .app-shell .button{min-height:42px;height:42px;padding:0 14px;font-size:13px}
+  .app-shell .dashboard-stats .stat-card{height:auto;min-height:94px;padding:14px}
+  .app-shell .dashboard-stats .stat-card strong{font-size:23px}
+  .app-shell .dashboard-table{min-height:500px}
+  .app-shell .dashboard-table-title{padding:12px;gap:10px}
+  .app-shell .dashboard-table th,.app-shell .dashboard-table td{padding:10px 12px}
+  .app-shell .review-grid{grid-template-columns:1fr}
+  .app-shell .review-grid>.card{min-height:0}
+  .app-shell .evidence{grid-template-columns:1fr}
+  .app-shell .evidence-picture{height:240px}
+  .app-shell .appeal-evidence{grid-template-columns:1fr}
+  .app-shell .notice-layout{grid-template-columns:1fr}
+  .app-shell .notice-layout>.card{min-height:0;height:auto}
+  .app-shell .notice-list{max-height:350px}
+  .app-shell .notice-detail{min-height:420px}
+  .app-shell .recruitment-list,.app-shell .applicant-list{min-height:0;overflow:auto}
+  .app-shell .recruitment-row,.app-shell .applicant-row{min-width:680px}
+  .app-shell .activity-list table{min-width:760px}
+}
+
+/* Preserve flush card layouts after applying shared card spacing. */
+.app-shell .dashboard-table,.app-shell .notice-list,.app-shell .applicant-list{padding:0}
+.app-shell .recruitment-list{padding:28px 20px}
+.app-shell .activity-list{padding:24px}
