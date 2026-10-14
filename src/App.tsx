@@ -43,7 +43,7 @@ export default function App() {
 
   const run = useCallback(async <T,>(key: string, fn: () => Promise<T>) => {
     try { const result = await fn(); setData((current) => ({ ...current, [key]: result })); return result }
-    catch (e) { if (e instanceof ApiError && e.code === 'NO_SEARCH_RESULT') { setData((current) => ({ ...current, [key]: [] })); return [] as T } setError(errorMessage(e)); return null }
+    catch (e) { setError(errorMessage(e)); return null }
   }, [])
   const reload = useCallback(() => setReloadKey((n) => n + 1), [])
 
@@ -69,7 +69,15 @@ export default function App() {
     if (page === 'appeals') void Promise.resolve().then(() => run('appeals', () => api.appeals()))
     if (page === 'recruitment') void Promise.resolve().then(() => run('recruitments', api.recruitments))
     if (page === 'zones') void Promise.resolve().then(() => run('areas', api.areas))
-    if (page === 'activity') void Promise.resolve().then(() => run('students', () => api.searchStudents(keyword)))
+    if (page === 'activity') {
+      let cancelled = false
+      setData((current) => ({ ...current, students: [] }))
+      setError('')
+      api.searchStudents(keyword)
+        .then((students) => { if (!cancelled) setData((current) => ({ ...current, students })) })
+        .catch((e) => { if (!cancelled) setError(errorMessage(e)) })
+      return () => { cancelled = true }
+    }
     if (page === 'notices') void Promise.resolve().then(() => run('notices', api.notices))
   }, [authenticated, profile, page, reloadKey, keyword, run, designPreview])
 
@@ -156,7 +164,7 @@ export default function App() {
       {page === 'review' && <Review items={reviews} selectedId={activeReviewId} onSelect={setSelectedReview} onDecide={async (item, decision, reason) => { setLoading(true); setError(''); try { await api.decideReview(item.verificationId, decision, reason); reload() } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) } }} />}
       {page === 'appeals' && <Appeals items={appeals} selectedId={activeAppealId} onSelect={setSelectedAppeal} onDecide={async (item, decision, reply) => { setLoading(true); setError(''); try { await api.decideAppeal(item.appealId, decision, reply, decision === 'APPROVED' ? '이의신청이 승인되었어요' : '이의신청 검토 결과'); reload() } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) } }} />}
       {page === 'recruitment' && (selectedRecruitment !== null ? <Applicants id={selectedRecruitment} items={applicants} onBack={() => setSelectedRecruitment(null)} /> : <Recruitment items={recruitments} onApplicants={openApplicants} onEdit={(item) => { setEditingRecruitment(item); setModal('recruit') }} />)}
-      {page === 'zones' && <Zones areas={areas} onToggle={toggleArea} onAssign={(area) => { setData((current) => ({ ...current, assignmentArea: area })); setModal('assign') }} onRemove={async (area, student, reason) => { setLoading(true); setError(''); try { await api.removeAssignment(area.areaId, student.studentId, reason); reload() } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) } }} />}
+      {page === 'zones' && <Zones areas={areas} onToggle={toggleArea} onAssign={(area) => { setData((current) => ({ ...current, assignmentArea: area })); setModal('assign') }} />}
       {page === 'activity' && (selectedStudent ? <StudentDetail student={selectedStudent} month={studentMonth} selectedMonth={month} onBack={() => { setSelectedStudent(null); setStudentMonth(null) }} /> : <Activity students={students} keyword={keyword} onSearch={setKeyword} sort={sort} onSort={setSort} onSelect={(student) => void openStudent(student)} />)}
       {page === 'notices' && <Notices items={notices} detail={noticeDetail?.noticeId === activeNoticeId ? noticeDetail : null} selectedId={activeNoticeId} onSelect={setSelectedNotice} onSave={async (detail) => { setLoading(true); setError(''); try { await api.updateNotice(detail.noticeId, detail.title, detail.content); reload() } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) } }} onDelete={async (id) => { setLoading(true); setError(''); try { await api.deleteNotice(id); setSelectedNotice(null); reload() } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) } }} />}
     </div></main>
@@ -271,7 +279,7 @@ function Recruitment({ items, onApplicants, onEdit }: { items: Recruitment[]; on
 
 function Applicants({ id, items, onBack }: { id: number; items: Applicant[]; onBack: () => void }) { return <><button className="text-button" onClick={onBack}>← 모집 목록</button><Card className="applicant-list"><CardTitle title={`모집 #${id} 신청자`} detail={`${items.length}명 · 신청 순서대로 표시`} />{items.map((item) => <div className="applicant-row" key={item.applicationId}><span className="order-badge">{item.order}</span><span>{item.studentNumber ?? '-'}</span><b>{item.name}</b><span>{item.motivation}</span></div>)}{!items.length && <Empty title="신청자가 없어요" detail="학생이 신청하면 순서대로 표시됩니다." />}</Card></> }
 
-function Zones({ areas, onToggle, onAssign, onRemove }: { areas: Area[]; onToggle: (area: Area) => void; onAssign: (area: Area) => void; onRemove: (area: Area, student: Area['assignedStudents'][number], reason: string) => void }) {
+function Zones({ areas, onToggle, onAssign }: { areas: Area[]; onToggle: (area: Area) => void; onAssign: (area: Area) => void }) {
   const floors = ['본관 1층', '본관 2층', '본관 3층', '별관 1층']
   const [floor, setFloor] = useState('본관 2층'); const [selectedId, setSelectedId] = useState<number | null>(null)
   const floorNumber = floor === '본관 1층' ? '1' : floor === '본관 2층' ? '2' : floor === '본관 3층' ? '3' : '별'
@@ -283,7 +291,7 @@ function Zones({ areas, onToggle, onAssign, onRemove }: { areas: Area[]; onToggl
     return code.endsWith(`f${floorNumber}`)
   })
   const selected = filtered.find((area) => area.areaId === selectedId) ?? filtered[0]
-  return <><div className="floor-tabs page-floor-tabs">{floors.map((item) => <button key={item} className={floor === item ? 'active' : ''} onClick={() => { setFloor(item); setSelectedId(null) }}>{item}</button>)}</div><div className="zone-layout"><Card><div className="zone-grid">{filtered.map((area, index) => <button key={area.areaId} className={`zone-tile ${area.isActive ? 'on' : 'off'} ${selected?.areaId === area.areaId ? 'picked' : ''}`} onClick={() => setSelectedId(area.areaId)}><span className="zone-index">{String(index + 1).padStart(2, '0')}</span><b>{area.name}</b><small>{area.isActive ? `청소 구역　${area.assignedStudents.length}명` : '청소 안 함'}</small></button>)}</div><div className="legend"><span><i className="legend-active" />청소 구역</span><span><i className="legend-off" />청소 안 함</span><span><i className="legend-picked" />선택됨</span></div></Card>{selected && <Card className="zone-detail"><div className="zone-detail-title"><h2>{selected.name}</h2><label>청소 구역<button className={`switch ${selected.isActive ? 'checked' : ''}`} aria-label="구역 활성화" onClick={() => onToggle(selected)}><i /></button></label></div><div className="zone-description"><b>구역 안내</b><p>{selected.description || '구역 안내가 등록되지 않았습니다.'}</p>{selected.cleanTime && <small>활동 시간 {selected.cleanTime}</small>}</div><div className="assigned-heading"><b>담당 학생</b><span>{selected.assignedStudents.length}명</span></div>{selected.assignedStudents.map((student) => <div className="assigned-student" key={student.studentId}><span><b>{student.name}</b><small> · {student.studentNumber ?? ''}</small></span><button className="remove-student" aria-label={`${student.name} 배정 해제`} onClick={() => { const reason = window.prompt(`${student.name} 학생을 제외하는 사유를 입력해 주세요.`); if (reason?.trim()) onRemove(selected, student, reason.trim()) }}>×</button></div>)}{!selected.assignedStudents.length && <p className="muted empty-inline">배정된 학생이 없습니다.</p>}<button className="button secondary full-button" disabled={!selected.isActive} onClick={() => onAssign(selected)}>＋ 학생 배정</button><button className="button primary zone-save">저장</button></Card>}</div>{areas.length > 0 && filtered.length === 0 && <Empty title={`${floor} 구역이 없어요`} detail="서버에 등록된 구역 이름에 층 정보가 있는지 확인해 주세요." />}</>
+  return <><div className="floor-tabs page-floor-tabs">{floors.map((item) => <button key={item} className={floor === item ? 'active' : ''} onClick={() => { setFloor(item); setSelectedId(null) }}>{item}</button>)}</div><div className="zone-layout"><Card><div className="zone-grid">{filtered.map((area, index) => <button key={area.areaId} className={`zone-tile ${area.isActive ? 'on' : 'off'} ${selected?.areaId === area.areaId ? 'picked' : ''}`} onClick={() => setSelectedId(area.areaId)}><span className="zone-index">{String(index + 1).padStart(2, '0')}</span><b>{area.name}</b><small>{area.isActive ? `청소 구역　${area.assignedStudents.length}명` : '청소 안 함'}</small></button>)}</div><div className="legend"><span><i className="legend-active" />청소 구역</span><span><i className="legend-off" />청소 안 함</span><span><i className="legend-picked" />선택됨</span></div></Card>{selected && <Card className="zone-detail"><div className="zone-detail-title"><h2>{selected.name}</h2><label>청소 구역<button className={`switch ${selected.isActive ? 'checked' : ''}`} aria-label="구역 활성화" onClick={() => onToggle(selected)}><i /></button></label></div><div className="zone-description"><b>구역 안내</b><p>{selected.description || '구역 안내가 등록되지 않았습니다.'}</p>{selected.cleanTime && <small>활동 시간 {selected.cleanTime}</small>}</div><div className="assigned-heading"><b>담당 학생</b><span>{selected.assignedStudents.length}명</span></div>{selected.assignedStudents.map((student) => <div className="assigned-student" key={student.studentId}><span><b>{student.name}</b><small> · {student.studentNumber ?? ''}</small></span></div>)}{!selected.assignedStudents.length && <p className="muted empty-inline">배정된 학생이 없습니다.</p>}<button className="button secondary full-button" disabled={!selected.isActive} onClick={() => onAssign(selected)}>＋ 학생 배정</button><button className="button primary zone-save">저장</button></Card>}</div>{areas.length > 0 && filtered.length === 0 && <Empty title={`${floor} 구역이 없어요`} detail="서버에 등록된 구역 이름에 층 정보가 있는지 확인해 주세요." />}</>
 }
 
 function Activity({ students, keyword, onSearch, sort, onSort, onSelect }: { students: StudentActivity[]; keyword: string; onSearch: (value: string) => void; sort: string; onSort: (value: string) => void; onSelect: (student: StudentActivity) => void }) {
