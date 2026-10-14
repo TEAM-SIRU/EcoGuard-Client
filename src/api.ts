@@ -251,10 +251,14 @@ export const api = {
   decideReview: (
     id: number,
     decision: "APPROVED" | "REJECTED",
+    reason?: string,
   ) =>
     request<void>(`/verifications/${id}/review`, {
       method: "PATCH",
-      body: JSON.stringify({ decision }),
+      body: JSON.stringify({
+        decision,
+        ...(reason?.trim() ? { reason: reason.trim() } : {}),
+      }),
     }),
   appeals: (status = "PENDING") =>
     request<Appeal[]>(`/appeals?status=${encodeURIComponent(status)}`),
