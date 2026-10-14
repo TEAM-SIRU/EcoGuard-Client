@@ -310,3 +310,119 @@
   .app-shell .applicant-columns,.app-shell .applicant-row{min-width:680px;padding-left:16px;padding-right:16px;gap:14px}
   .app-shell .applicant-row{padding-top:12px;padding-bottom:12px}
 }
+
+/* Shared motion for screen changes and interactive controls. */
+@keyframes eco-screen-enter{
+  from{opacity:0;transform:translateY(8px)}
+  to{opacity:1;transform:translateY(0)}
+}
+@keyframes eco-modal-enter{
+  from{opacity:0;transform:translateY(8px) scale(.985)}
+  to{opacity:1;transform:translateY(0) scale(1)}
+}
+.app-shell .page-content> :not(.loading-line){animation:eco-screen-enter .28s cubic-bezier(.2,.7,.25,1) both}
+.app-shell .page-content> :nth-child(2){animation-delay:35ms}
+.app-shell .page-content> :nth-child(3){animation-delay:65ms}
+.app-shell .nav-item,.app-shell .button,.app-shell .icon-btn,.app-shell .text-button,
+.app-shell .stat-card,.app-shell .task-row,.app-shell .review-item,.app-shell .appeal-list,
+.app-shell .notice-row,.app-shell .recruitment-row,.app-shell .applicant-row,
+.app-shell .floor-tabs button,.app-shell .page-floor-tabs button,
+.app-shell input,.app-shell select,.app-shell textarea{
+  transition:background-color .18s ease,border-color .18s ease,color .18s ease,
+    box-shadow .18s ease,transform .18s ease;
+}
+.app-shell .modal-backdrop{animation:eco-screen-enter .18s ease-out both}
+.app-shell .modal{animation:eco-modal-enter .22s cubic-bezier(.2,.7,.25,1) both}
+.app-shell .table-wrap tbody tr{transition:background-color .16s ease}
+.app-shell .table-wrap tbody tr:hover{background:#f7faf6}
+@media(hover:hover){
+  .app-shell .button:hover,.app-shell .icon-btn:hover,.app-shell .text-button:hover,
+  .app-shell .review-item:hover,.app-shell .appeal-list:hover,.app-shell .notice-row:hover,
+  .app-shell .recruitment-row:hover,.app-shell .applicant-row:hover,
+  .app-shell .floor-tabs button:hover,.app-shell .page-floor-tabs button:hover{
+    transform:translateY(-1px)
+  }
+}
+
+/* Tablet layouts: let dense work areas use the full content width. */
+@media(max-width:1024px){
+  .app-shell .sidebar{width:210px;flex-basis:210px;padding-left:14px;padding-right:12px}
+  .app-shell .page-content{padding-left:24px;padding-right:24px}
+  .app-shell .two-col,.app-shell .appeal-layout,.app-shell .notice-layout,
+  .app-shell .review-grid,.app-shell .dashboard-grid,.app-shell .zone-layout{
+    grid-template-columns:minmax(0,1fr);gap:16px
+  }
+  .app-shell .notice-layout>.card,.app-shell .review-grid>.card,
+  .app-shell .zone-layout>.card{height:auto;min-height:0}
+  .app-shell .review-list,.app-shell .notice-list{max-height:420px;overflow:auto}
+  .app-shell .dashboard-table{height:auto;min-height:520px}
+  .app-shell .dashboard-table .table-wrap{height:auto;min-height:420px;overflow:auto}
+  .app-shell .dashboard-side{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}
+}
+
+/* Small screens: keep navigation and dense tables scrollable without clipping. */
+@media(max-width:760px){
+  .app-shell{display:block}
+  .app-shell .sidebar{position:sticky;top:0;z-index:20;width:100%;height:auto;min-height:0;
+    padding:10px 12px;display:grid;grid-template-columns:1fr;align-items:start;gap:8px;overflow-x:hidden}
+  .app-shell .sidebar .brand{width:max-content;flex:0 0 auto;padding:0;margin:0;border:0}
+  .app-shell .nav-group{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%;gap:4px;margin:0;overflow:visible}
+  .app-shell .nav-item{width:100%;min-width:0;height:36px;min-height:36px;flex:initial;margin:0;padding:0 4px;justify-content:center;font-size:11px;white-space:nowrap}
+  .app-shell .sidebar-bottom{display:none}
+  .app-shell .main-area{width:100%;min-width:0}
+  .app-shell .page-content{width:100%;padding:24px 16px 36px}
+  .app-shell .page-title-row{align-items:flex-start}
+  .app-shell .page-title-row>.button{position:static;width:auto;margin-left:auto}
+  .app-shell .page-title-row>div:first-child{min-width:0}
+  .app-shell .page-header-actions{position:static;width:100%;margin-top:10px;justify-content:flex-start}
+  .app-shell .page-floor-tabs{width:100%;justify-content:flex-start;flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px}
+  .app-shell .page-floor-tabs button{flex:0 0 auto}
+  .app-shell .dashboard-side{grid-template-columns:1fr}
+  .app-shell .evidence,.app-shell .appeal-evidence,.app-shell .review-detail-grid{grid-template-columns:1fr}
+  .app-shell .review-detail{min-width:0}
+  .app-shell .appeal-layout,.app-shell .notice-layout,.app-shell .two-col,
+  .app-shell .review-grid,.app-shell .dashboard-grid,.app-shell .zone-layout{grid-template-columns:minmax(0,1fr)}
+  .app-shell .activity-toolbar{display:flex;align-items:stretch;gap:10px;flex-wrap:wrap}
+  .app-shell .activity-toolbar .search-box{width:100%;flex:1 1 100%}
+  .app-shell .search-box input{width:100%;min-width:0}
+  .app-shell .filter-pills{max-width:100%;overflow-x:auto;flex-wrap:nowrap}
+  .app-shell .filter-pills button{flex:0 0 auto}
+  .app-shell .recruitment-list,.app-shell .applicant-list,.app-shell .activity-list{max-width:100%;overflow:auto}
+  .app-shell .recruitment-columns,.app-shell .recruitment-row{min-width:680px}
+  .app-shell .applicant-columns,.app-shell .applicant-row{min-width:680px}
+  .app-shell .activity-list table{min-width:760px}
+  .app-shell .modal-backdrop{padding:14px;align-items:center}
+  .app-shell .modal{width:min(100%,560px);max-height:calc(100dvh - 28px);overflow:auto;padding:22px}
+  .app-shell .modal-actions{flex-wrap:wrap}
+}
+@media(max-width:480px){
+  .app-shell .page-content{padding:20px 12px 30px}
+  .app-shell h1{font-size:21px;line-height:1.35}
+  .app-shell .page-subtitle{font-size:12px}
+  .app-shell .page-title-row{gap:10px}
+  .app-shell .page-title-row>.button{min-height:40px;height:40px;padding:0 11px;font-size:12px}
+  .app-shell .page-header-actions{gap:8px}
+  .app-shell .month-current{min-width:104px;font-size:12px}
+  .app-shell .page-header-actions .button{padding:0 11px}
+  .app-shell .card{padding:15px;border-radius:10px}
+  .app-shell .dashboard-table,.app-shell .notice-list,.app-shell .applicant-list{padding:0}
+  .app-shell .today-filters{padding-left:12px;padding-right:12px}
+  .app-shell .today-filters>div{overflow-x:auto}
+  .app-shell .today-filters button{height:34px;padding:0 9px;font-size:11px}
+  .app-shell .dashboard-table-title{align-items:flex-start;flex-wrap:wrap}
+  .app-shell .dashboard-table-title>span{margin-left:auto}
+  .app-shell .decision-actions .button{flex:1 1 auto}
+  .app-shell .notice-editor-actions{flex-wrap:wrap}
+  .app-shell .notice-editor-actions .button{flex:1 1 auto}
+  .app-shell .student-detail-head{align-items:flex-start;gap:12px;flex-direction:column}
+  .app-shell .student-detail-head h2{font-size:19px}
+  .app-shell .applicant-list>.card-title{align-items:flex-start;gap:8px;flex-direction:column}
+  .app-shell .modal{padding:18px}
+  .app-shell .modal-actions .button{flex:1 1 120px}
+}
+@media(prefers-reduced-motion:reduce){
+  .app-shell *, .app-shell *::before, .app-shell *::after{
+    animation-duration:.01ms!important;animation-iteration-count:1!important;
+    scroll-behavior:auto!important;transition-duration:.01ms!important
+  }
+}
