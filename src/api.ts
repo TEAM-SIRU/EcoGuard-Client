@@ -172,6 +172,7 @@ export type Recruitment = {
   applicantCount: number;
   isFull: boolean;
 };
+type RecruitmentResponse = Omit<Recruitment, "isFull"> & { full: boolean };
 export type Applicant = {
   applicationId: number;
   order: number;
@@ -195,6 +196,7 @@ export type Area = {
     name: string;
   }[];
 };
+type AreaResponse = Omit<Area, "isActive"> & { active: boolean };
 export type StudentActivity = {
   studentId: number;
   studentNumber: string | null;
@@ -233,6 +235,7 @@ export type Notice = {
   isRead: boolean;
   createdAt: string;
 };
+type NoticeResponse = Omit<Notice, "isRead"> & { read: boolean };
 export type NoticeDetail = {
   noticeId: number;
   title: string;
@@ -248,11 +251,14 @@ export const api = {
   decideReview: (
     id: number,
     decision: "APPROVED" | "REJECTED",
-    _reason?: string,
+    reason?: string,
   ) =>
     request<void>(`/verifications/${id}/review`, {
       method: "PATCH",
-      body: JSON.stringify({ decision }),
+      body: JSON.stringify({
+        decision,
+        ...(reason?.trim() ? { reason: reason.trim() } : {}),
+      }),
     }),
   appeals: (status = "PENDING") =>
     request<Appeal[]>(`/appeals?status=${encodeURIComponent(status)}`),
@@ -266,7 +272,10 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ decision, reply, replyTitle }),
     }),
-  recruitments: () => request<Recruitment[]>("/recruitments"),
+  recruitments: async () => {
+    const items = await request<RecruitmentResponse[]>("/recruitments");
+    return items.map(({ full, ...item }) => ({ ...item, isFull: full }));
+  },
   applicants: (id: number) =>
     request<Applicant[]>(`/recruitments/${id}/applications`),
   createRecruitment: (body: unknown) =>
@@ -279,17 +288,22 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(body),
     }),
-  areas: () => request<Area[]>("/cleaning-areas"),
+  areas: async () => {
+    const items = await request<AreaResponse[]>("/cleaning-areas");
+    return items.map(({ active, ...area }) => ({ ...area, isActive: active }));
+  },
   updateArea: (id: number, isActive: boolean) =>
     request<void>(`/cleaning-areas/${id}`, {
       method: "PATCH",
-      body: JSON.stringify({ isActive }),
+      body: JSON.stringify({ active: isActive }),
     }),
   assignStudents: (id: number, studentIds: number[]) =>
     request<unknown>(`/cleaning-areas/${id}/assignments`, {
       method: "POST",
       body: JSON.stringify({ studentIds }),
     }),
+  removeAssignment: (areaId: number, studentId: number) =>
+    request<void>(`/cleaning-areas/${areaId}/assignments/${studentId}`, { method: "DELETE" }),
   searchStudents: async (keyword: string) => {
     try {
       return await request<StudentActivity[]>(
@@ -304,7 +318,10 @@ export const api = {
     request<StudentMonth>(
       `/students/${id}/activities?year=${year}&month=${month}`,
     ),
-  notices: () => request<Notice[]>("/notices"),
+  notices: async () => {
+    const items = await request<NoticeResponse[]>("/notices");
+    return items.map(({ read, ...notice }) => ({ ...notice, isRead: read }));
+  },
   notice: (id: number) => request<NoticeDetail>(`/notices/${id}`),
   createNotice: (title: string, content: string) =>
     request<{ noticeId: number }>("/notices", {
