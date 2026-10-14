@@ -289,11 +289,6 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ studentIds }),
     }),
-  removeAssignment: (areaId: number, studentId: number, reason: string) =>
-    request<void>(`/cleaning-areas/${areaId}/assignments/${studentId}`, {
-      method: "DELETE",
-      body: JSON.stringify({ reason }),
-    }),
   searchStudents: async (keyword: string) => {
     try {
       return await request<StudentActivity[]>(
