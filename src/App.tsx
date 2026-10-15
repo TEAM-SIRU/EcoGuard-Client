@@ -25,9 +25,14 @@ export default function App() {
   const previewParams = new URLSearchParams(window.location.search)
   const noticeDeletePreview = import.meta.env.DEV && previewParams.get('admin-preview') === 'notice-delete'
   const zonesPreview = import.meta.env.DEV && previewParams.get('admin-preview') === 'zones'
+  const todayPreview = import.meta.env.DEV && previewParams.get('admin-preview') === 'today'
   const designPreview = import.meta.env.DEV && previewParams.has('admin-preview')
   const previewNotice: Notice = { noticeId: 1, title: '아침 청소 활동 안내', preview: '이번 주 아침 청소 활동 안내입니다.', isRead: true, createdAt: now.toISOString() }
   const previewAreas: Area[] = [{ areaId: 21, zoneCode: 'main_corridor_f2', name: '2층 복도', description: '복도와 계단 주변을 깨끗하게 관리해요.', cleanTime: '08:00–08:30', semester: '2026-2', isActive: true, assignedStudents: [{ studentId: 101, studentNumber: '2-3', name: '김하늘' }, { studentId: 102, studentNumber: '2-3', name: '박지우' }, { studentId: 103, studentNumber: '2-4', name: '이서윤' }] }]
+  const previewTodayNames = ['김서현', '이도윤', '최민준', '김민서', '박지호', '정하은', '오태윤', '한지우', '서민재', '유나연', '강민호', '윤서아', '백지훈', '임수빈', '조현우', '최서윤', '문예린', '장민재', '신하윤', '황도현', '안유진', '송지호', '전하린', '홍서준']
+  const previewTodayAreas: Area[] = [{ areaId: 31, zoneCode: 'hallway_f2_a', name: '본관 2층 복도 A', description: null, cleanTime: null, semester: '2026-2', isActive: true, assignedStudents: previewTodayNames.slice(0, 8).map((name, index) => ({ studentId: 301 + index, studentNumber: `2-${index < 2 ? 1 : index < 5 ? 3 : 2}`, name })) }, { areaId: 32, zoneCode: 'stairs_f2', name: '본관 2층 계단', description: null, cleanTime: null, semester: '2026-2', isActive: true, assignedStudents: previewTodayNames.slice(8, 16).map((name, index) => ({ studentId: 309 + index, studentNumber: `2-${index % 4 + 1}`, name })) }, { areaId: 33, zoneCode: 'restroom_f2', name: '본관 2층 화장실', description: null, cleanTime: null, semester: '2026-2', isActive: true, assignedStudents: previewTodayNames.slice(16).map((name, index) => ({ studentId: 317 + index, studentNumber: `2-${index % 4 + 1}`, name })) }]
+  const previewTodayReviews: ReviewItem[] = [{ verificationId: 901, studentName: '이도윤', areaName: '본관 2층 복도 A', photoUrl: '', submittedAt: `${now.toISOString().slice(0, 10)}T08:04:00`, reason: null, failReasons: [] }, { verificationId: 902, studentName: '김민서', areaName: '본관 2층 복도 A', photoUrl: '', submittedAt: `${now.toISOString().slice(0, 10)}T07:52:00`, reason: '구역이 사진에 충분히 보이지 않음', failReasons: [] }, { verificationId: 903, studentName: '서민재', areaName: '본관 2층 계단', photoUrl: '', submittedAt: `${now.toISOString().slice(0, 10)}T07:58:00`, reason: null, failReasons: [] }]
+  const previewTodayAppeals: Appeal[] = [{ appealId: 801, verificationId: 803, round: 1, studentName: '박지호', studentNumber: '2-3', areaName: '본관 2층 복도 A', verificationDate: now.toISOString().slice(0, 10), photoUrl: '', failReasons: [], content: '청소까지 했는데 반려됐어요', photoUrls: [], status: 'PENDING', replyTitle: null, reply: null, createdAt: now.toISOString() }]
   const previewNoticeDetail: NoticeDetail = { noticeId: 1, title: previewNotice.title, content: previewNotice.preview, createdAt: previewNotice.createdAt, previousNoticeId: null, nextNoticeId: null }
   const [authenticated, setAuthenticated] = useState(hasSession() || designPreview)
   const [profile, setProfile] = useState<Profile | null>(designPreview ? { userId: 0, name: '담당 선생님', role: 'TEACHER', studentNumber: null, grade: null, classNo: null } : null)
@@ -35,7 +40,7 @@ export default function App() {
   const [reloadKey, setReloadKey] = useState(0)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [data, setData] = useState<Record<string, unknown>>(zonesPreview ? { areas: previewAreas } : noticeDeletePreview ? { notices: [previewNotice] } : {})
+  const [data, setData] = useState<Record<string, unknown>>(todayPreview ? { areas: previewTodayAreas, reviews: previewTodayReviews, appeals: previewTodayAppeals } : zonesPreview ? { areas: previewAreas } : noticeDeletePreview ? { notices: [previewNotice] } : {})
   const [selectedReview, setSelectedReview] = useState<number | null>(null)
   const [selectedAppeal, setSelectedAppeal] = useState<number | null>(null)
   const [selectedRecruitment, setSelectedRecruitment] = useState<number | null>(null)
@@ -171,7 +176,7 @@ export default function App() {
     <aside className="sidebar"><div className="brand"><img className="brand-logo" src={leafLogo} alt="" /><span>환경지킴이<small>교사 관리</small></span></div><div className="nav-group">{navigation.map((item) => <button key={item.id} className={`nav-item ${page === item.id ? 'selected' : ''}`} onClick={() => { setPage(item.id); if (item.id === 'recruitment') setSelectedRecruitment(null); setSelectedStudent(null); setError('') }}><span className="nav-icon">{item.icon}</span>{item.label}{item.id === 'review' && reviews.length > 0 && <b className="nav-count">{reviews.length}</b>}{item.id === 'appeals' && appeals.length > 0 && <b className="nav-count">{appeals.length}</b>}</button>)}</div><div className="sidebar-bottom"><div className="avatar">{profile.name.slice(0, 1)}</div><div>{profile.name} 선생님<small>교사 계정</small></div><button className="icon-btn" title="로그아웃" onClick={() => setLogoutConfirm(true)}>↪</button></div></aside>
     <main className="main-area"><div className="page-content"><div className={`page-title-row ${page === 'today' ? 'dashboard-page-title' : ''}`}><div>{page === 'today' && <span className="date-label">{now.toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short' })}</span>}<h1>{selectedStudent && page === 'activity' ? `${selectedStudent.name} 활동 기록` : page === 'recruitment' && selectedRecruitment !== null ? '모집 신청자 관리' : title}</h1>{page !== 'today' && <p className="page-subtitle">{selectedStudent && page === 'activity' ? `${selectedStudent.studentNumber ?? ''} · 승인 인증을 기준으로 활동 시간을 확인해요.` : pageSubtitles[page]}</p>}</div>{page === 'recruitment' && selectedRecruitment === null && <button className="button primary" onClick={() => { setEditingRecruitment(null); setModal('recruit') }}>＋ 새 모집 공고</button>}{page === 'notices' && <button className="button primary" onClick={() => setModal('notice')}>＋ 새 공지</button>}{page === 'activity' && <div className="page-header-actions"><MonthPicker value={month} onChange={(value) => void changeMonth(value)} /><button className="button secondary" onClick={() => exportStudentsCsv(students)}>엑셀로 내보내기</button></div>}</div>
       {loading && <div className="loading-line">서버에서 최신 정보를 불러오는 중…</div>}
-      {page === 'today' && <Dashboard reviews={reviews} appeals={appeals} areas={areas} date={now} onNavigate={setPage} />}
+      {page === 'today' && <Dashboard reviews={reviews} appeals={appeals} areas={areas} date={now} preview={todayPreview} onNavigate={setPage} />}
       {page === 'review' && <Review items={reviews} selectedId={activeReviewId} onSelect={setSelectedReview} onDecide={async (item, decision, reason) => { setLoading(true); setError(''); try { await api.decideReview(item.verificationId, decision, reason); toast.success(decision === 'APPROVED' ? '인증을 승인했어요.' : '인증을 반려했어요.'); reload() } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) } }} />}
       {page === 'appeals' && <Appeals items={appeals} selectedId={activeAppealId} onSelect={setSelectedAppeal} onDecide={async (item, decision, reply) => { setLoading(true); setError(''); try { await api.decideAppeal(item.appealId, decision, reply, decision === 'APPROVED' ? '이의신청이 승인되었어요' : '이의신청 검토 결과'); toast.success(decision === 'APPROVED' ? '이의신청을 승인했어요.' : '이의신청을 반려했어요.'); reload() } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) } }} />}
       {page === 'recruitment' && (selectedRecruitment !== null ? <Applicants id={selectedRecruitment} items={applicants} onBack={() => setSelectedRecruitment(null)} /> : <Recruitment items={recruitments} onApplicants={openApplicants} onEdit={(item) => { setEditingRecruitment(item); setModal('recruit') }} />)}
@@ -288,10 +293,10 @@ function MonthPicker({ value, onChange }: { value: Date; onChange: (month: Date)
 }
 
 type TodayStatus = 'APPROVED' | 'REJECTED' | 'PROCESSING' | 'MANUAL_REVIEW' | 'NOT_SUBMITTED' | 'UPCOMING' | 'UNKNOWN'
-type TodayStudent = { studentId: number; studentNumber: string | null; name: string; area: string; status: TodayStatus }
+type TodayStudent = { studentId: number; studentNumber: string | null; name: string; area: string; status: TodayStatus; records: StudentMonth['records'] }
 type TodayFilter = 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'NOT_SUBMITTED'
 
-function Dashboard({ reviews, appeals, areas, date, onNavigate }: { reviews: ReviewItem[]; appeals: Appeal[]; areas: Area[]; date: Date; onNavigate: (page: Page) => void }) {
+function Dashboard({ reviews, appeals, areas, date, preview = false, onNavigate }: { reviews: ReviewItem[]; appeals: Appeal[]; areas: Area[]; date: Date; preview?: boolean; onNavigate: (page: Page) => void }) {
   const [todayStudents, setTodayStudents] = useState<TodayStudent[]>([])
   const [todayLoading, setTodayLoading] = useState(false)
   const [todayFilter, setTodayFilter] = useState<TodayFilter>('ALL')
@@ -300,9 +305,26 @@ function Dashboard({ reviews, appeals, areas, date, onNavigate }: { reviews: Rev
   useEffect(() => {
     const roster = new Map<number, TodayStudent>()
     areas.forEach((area) => area.assignedStudents.forEach((student) => {
-      roster.set(student.studentId, { ...student, area: area.name, status: 'UNKNOWN' })
+      roster.set(student.studentId, { ...student, area: area.name, status: 'UNKNOWN', records: [] })
     }))
     const students = [...roster.values()]
+    if (preview) {
+      const demoStatuses: TodayStatus[] = ['APPROVED', 'MANUAL_REVIEW', 'NOT_SUBMITTED', 'MANUAL_REVIEW', 'APPROVED', 'APPROVED', 'REJECTED', 'NOT_SUBMITTED', 'MANUAL_REVIEW', 'APPROVED', 'APPROVED', 'APPROVED', 'APPROVED', 'APPROVED', 'APPROVED', 'APPROVED', 'APPROVED', 'APPROVED', 'APPROVED', 'APPROVED', 'NOT_SUBMITTED', 'NOT_SUBMITTED', 'NOT_SUBMITTED', 'NOT_SUBMITTED']
+      const monday = new Date(date)
+      monday.setDate(date.getDate() - ((date.getDay() + 6) % 7))
+      const previewResults: TodayStudent[] = students.map((student, index) => {
+        const records: StudentMonth['records'] = Array.from({ length: 5 }, (_, dayIndex) => {
+          const day = new Date(monday)
+          day.setDate(monday.getDate() + dayIndex)
+          const recordDate = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`
+          const submitted = index < [22, 21, 18, 0, 0][dayIndex]
+          return { date: recordDate, area: student.area, result: submitted ? 'APPROVED' : 'NOT_SUBMITTED', verificationId: submitted ? index * 5 + dayIndex : null, photoUrl: null, minutes: submitted ? 10 : 0 }
+        })
+        return { ...student, status: demoStatuses[index] ?? 'NOT_SUBMITTED', records }
+      })
+      void Promise.resolve().then(() => { setTodayStudents(previewResults); setTodayLoading(false) })
+      return
+    }
     if (!students.length) {
       let cancelled = false
       void Promise.resolve().then(() => { if (!cancelled) { setTodayStudents([]); setTodayLoading(false) } })
@@ -317,26 +339,35 @@ function Dashboard({ reviews, appeals, areas, date, onNavigate }: { reviews: Rev
         const index = next++
         const student = students[index]
         let status: TodayStatus = 'UNKNOWN'
+        let records: StudentMonth['records'] = []
         try {
           const month = await api.studentMonth(student.studentId, date.getFullYear(), date.getMonth() + 1)
+          records = month.records
           status = (month.records.find((record) => record.date === dateKey)?.result as TodayStatus | undefined) ?? 'UPCOMING'
         } catch { /* Show the rest of the dashboard if one student's record is unavailable. */ }
-        results[index] = { ...student, status }
+        results[index] = { ...student, status, records }
       }
     }
     void Promise.all(Array.from({ length: Math.min(6, students.length) }, () => worker())).then(() => {
       if (!cancelled) { setTodayStudents(results); setTodayLoading(false) }
     })
     return () => { cancelled = true }
-  }, [areas, dateKey, date])
+  }, [areas, dateKey, date, preview])
 
+  const submitted = todayStudents.filter((student) => ['APPROVED', 'REJECTED', 'PROCESSING', 'MANUAL_REVIEW'].includes(student.status)).length
+  const approved = todayStudents.filter((student) => student.status === 'APPROVED').length
+  const notSubmitted = todayStudents.filter((student) => student.status === 'NOT_SUBMITTED').length
   const stats = [
-    { label: '선생님 확인 대기', value: String(reviews.length), target: 'review' as Page, tone: 'highlight' },
-    { label: '이의신청', value: String(appeals.length), target: 'appeals' as Page, tone: 'muted' },
+    { label: '제출', value: submitted, suffix: `/${todayStudents.length}명`, target: 'activity' as Page, tone: '' },
+    { label: '승인', value: approved, target: 'activity' as Page, tone: '' },
+    { label: '선생님 확인 대기 ›', value: reviews.length, target: 'review' as Page, tone: 'highlight' },
+    { label: '이의신청 ›', value: appeals.length, target: 'appeals' as Page, tone: 'muted' },
+    { label: '미제출', value: notSubmitted, target: 'activity' as Page, tone: '' },
   ]
   const latest = [
-    ...reviews.map((item) => ({ type: `선생님 확인 · ${new Date(item.submittedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}`, title: `${item.studentName} · ${item.areaName}`, detail: item.reason || item.failReasons.join(', ') || 'AI가 판단하기 어려운 사진', page: 'review' as Page })),
-    ...appeals.map((item) => ({ type: '이의신청 · 확인 필요', title: `${item.studentName} · ${item.areaName}`, detail: item.content, page: 'appeals' as Page })),
+    ...reviews.slice(0, 2).map((item) => ({ type: `선생님 확인 · ${new Date(item.submittedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}`, title: `${item.studentName} · ${item.areaName}`, detail: item.reason || item.failReasons.join(', ') || 'AI가 판단하기 어려운 사진', page: 'review' as Page })),
+    ...appeals.slice(0, 1).map((item) => ({ type: '이의신청 · 확인 필요', title: `${item.studentName} · ${item.areaName}`, detail: item.content, page: 'appeals' as Page })),
+    ...reviews.slice(2).map((item) => ({ type: `선생님 확인 · ${new Date(item.submittedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}`, title: `${item.studentName} · ${item.areaName}`, detail: item.reason || item.failReasons.join(', ') || 'AI가 판단하기 어려운 사진', page: 'review' as Page })),
   ].slice(0, 3)
   const pending = (student: TodayStudent) => student.status === 'PROCESSING' || student.status === 'MANUAL_REVIEW'
   const filters: { id: TodayFilter; label: string; count: number }[] = [
@@ -348,7 +379,16 @@ function Dashboard({ reviews, appeals, areas, date, onNavigate }: { reviews: Rev
   ]
   const filteredStudents = todayStudents.filter((student) => todayFilter === 'ALL' || (todayFilter === 'PENDING' ? pending(student) : student.status === todayFilter))
   const statusLabels: Record<TodayStatus, string> = { APPROVED: '승인', REJECTED: '반려', PROCESSING: '확인 대기', MANUAL_REVIEW: '확인 대기', NOT_SUBMITTED: '미제출', UPCOMING: '예정', UNKNOWN: '확인 불가' }
-  return <><div className="stats-grid dashboard-stats">{stats.map(({ label, value, target, tone }) => <button className={`stat-card ${tone}`} key={label} onClick={() => onNavigate(target)}><span>{label}</span><strong>{value}</strong></button>)}</div><div className="dashboard-grid"><Card className="dashboard-table"><div className="card-title dashboard-table-title"><h2>오늘 청소 활동</h2><span>{date.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' })}</span></div><div className="today-filters" role="tablist" aria-label="오늘 활동 상태"><div>{filters.map((filter) => <button key={filter.id} type="button" role="tab" aria-selected={todayFilter === filter.id} className={todayFilter === filter.id ? 'active' : ''} onClick={() => setTodayFilter(filter.id)}>{filter.label}<span>{filter.count}</span></button>)}</div></div><div className="table-wrap"><table><thead><tr><th>학생</th><th>구역</th><th>상태</th></tr></thead><tbody>{filteredStudents.map((student) => <tr key={student.studentId}><td><b>{student.name}</b><small>{student.studentNumber ?? '학번 없음'}</small></td><td>{student.area}</td><td><span className={`status status-${statusLabels[student.status]}`}>{statusLabels[student.status]}</span></td></tr>)}{!filteredStudents.length && <tr className="dashboard-empty-row"><td colSpan={3}>{todayLoading ? '오늘 현황을 불러오는 중…' : todayStudents.length ? '이 상태의 학생이 없습니다.' : '배정된 학생이 없습니다.'}</td></tr>}</tbody></table></div></Card><div className="dashboard-side"><Card className="attention-card"><CardTitle title="확인이 필요해요" />{latest.length ? latest.map((item, index) => <button key={`${item.type}-${index}`} className={`attention-row ${item.page === 'appeals' ? 'appeal' : ''}`} onClick={() => onNavigate(item.page)}><small>{item.type}</small><b>{item.title}</b><span>{item.detail}</span></button>) : <div className="dashboard-quiet">확인이 필요한 항목이 없어요.</div>}</Card></div></div></>
+  const weekDays = Array.from({ length: 5 }, (_, index) => {
+    const monday = new Date(date)
+    monday.setDate(date.getDate() - ((date.getDay() + 6) % 7))
+    const day = new Date(monday)
+    day.setDate(monday.getDate() + index)
+    const key = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`
+    const active = todayStudents.filter((student) => student.records.some((record) => record.date === key && record.result !== 'NOT_SUBMITTED')).length
+    return { label: ['월', '화', '수', '목', '금'][index], percent: todayStudents.length ? Math.round(active / todayStudents.length * 100) : 0 }
+  })
+  return <><div className="stats-grid dashboard-stats">{stats.map(({ label, value, suffix, target, tone }) => <button className={`stat-card ${tone}`} key={label} onClick={() => onNavigate(target)}><span>{label}</span><strong>{value}{suffix && <small>{suffix}</small>}</strong></button>)}</div><div className="dashboard-grid"><Card className="dashboard-table"><div className="card-title dashboard-table-title"><h2>학생별 오늘 인증</h2><div className="dashboard-filters" role="tablist" aria-label="오늘 활동 상태">{filters.map((filter) => <button key={filter.id} type="button" role="tab" aria-selected={todayFilter === filter.id} className={todayFilter === filter.id ? 'active' : ''} onClick={() => setTodayFilter(filter.id)}>{filter.label}</button>)}</div></div><div className="table-wrap"><table><thead><tr><th>학생</th><th>구역</th><th>제출</th><th>상태</th></tr></thead><tbody>{filteredStudents.map((student) => { const review = reviews.find((item) => item.studentName === student.name && item.areaName === student.area); const submittedAt = review ? new Date(review.submittedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : '—'; return <tr key={student.studentId}><td><b>{student.name}</b><small>{student.studentNumber ?? '학번 없음'}</small></td><td>{student.area}</td><td>{submittedAt}</td><td><span className={`status status-${statusLabels[student.status]}`}>{statusLabels[student.status]}</span></td></tr> })}{!filteredStudents.length && <tr className="dashboard-empty-row"><td colSpan={4}>{todayLoading ? '오늘 현황을 불러오는 중…' : todayStudents.length ? '이 상태의 학생이 없습니다.' : '배정된 학생이 없습니다.'}</td></tr>}</tbody></table></div></Card><div className="dashboard-side"><Card className="attention-card"><CardTitle title="확인이 필요해요" />{latest.length ? latest.map((item, index) => <button key={`${item.type}-${index}`} className={`attention-row ${item.page === 'appeals' ? 'appeal' : ''}`} onClick={() => onNavigate(item.page)}><small>{item.type}</small><b>{item.title}</b><span>{item.detail}</span></button>) : <div className="dashboard-quiet">확인이 필요한 항목이 없어요.</div>}</Card><Card className="week-card"><div className="week-heading"><b>이번 주 참여율</b><span>제출 / 배정 인원</span></div><div className="week-bars">{weekDays.map((day, index) => <div key={day.label}><b>{day.percent ? `${day.percent}%` : '—'}</b><i style={{ height: `${Math.max(day.percent, 3)}%`, background: index === 2 ? '#57c144' : '#edf8eb' }} /><small>{day.label}</small></div>)}</div></Card></div></div></>
 }
 
 function Review({ items, selectedId, onSelect, onDecide }: { items: ReviewItem[]; selectedId: number | null; onSelect: (id: number) => void; onDecide: (item: ReviewItem, decision: 'APPROVED' | 'REJECTED', reason?: string) => void }) {
