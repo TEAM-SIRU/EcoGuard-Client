@@ -196,7 +196,6 @@ export type Area = {
     name: string;
   }[];
 };
-type AreaResponse = Omit<Area, "isActive"> & { active: boolean };
 export type StudentActivity = {
   studentId: number;
   studentNumber: string | null;
@@ -289,13 +288,12 @@ export const api = {
       body: JSON.stringify(body),
     }),
   areas: async () => {
-    const items = await request<AreaResponse[]>("/cleaning-areas");
-    return items.map(({ active, ...area }) => ({ ...area, isActive: active }));
+    return request<Area[]>("/cleaning-areas");
   },
   updateArea: (id: number, isActive: boolean) =>
     request<void>(`/cleaning-areas/${id}`, {
       method: "PATCH",
-      body: JSON.stringify({ active: isActive }),
+      body: JSON.stringify({ isActive }),
     }),
   assignStudents: (id: number, studentIds: number[]) =>
     request<unknown>(`/cleaning-areas/${id}/assignments`, {
