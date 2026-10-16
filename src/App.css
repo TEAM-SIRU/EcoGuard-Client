@@ -22,8 +22,9 @@
 @media(max-width:900px){.admin-login-screen{grid-template-columns:minmax(300px,42%) minmax(0,1fr)}.login-brand-panel{padding:40px}.login-form-panel{padding:28px}}
 @media(max-width:620px){.admin-login-screen{grid-template-columns:1fr}.login-brand-panel{height:auto;min-height:240px;padding:24px 24px 28px;gap:30px}.login-hero h1{font-size:28px}.login-hero p{margin-top:10px}.login-footer{display:none}.login-form-panel{height:auto;min-height:360px;padding:32px 24px;align-items:flex-start}.login-form-content{width:100%}}
 .notice-delete-dialog{display:flex;flex-direction:column;align-items:stretch;text-align:left;padding:6px 6px 2px}
-.notice-delete-icon{display:grid;place-items:center;align-self:center;width:48px;height:48px;margin:20px 0 18px;border-radius:50%;background:#fff0ee;color:#c8544b;font-size:24px;font-weight:700}
-.notice-delete-dialog>p{margin:0;color:#696c6d;font-size:12px;line-height:1.6}
+.notice-delete-warning{display:flex;align-items:center;gap:10px;margin:4px 0 18px}
+.notice-delete-icon{display:grid;place-items:center;flex:0 0 26px;width:26px;height:26px;margin:0;border-radius:50%;background:#fff0ee;color:#c8544b;font-size:15px;font-weight:700}
+.notice-delete-warning p{margin:0;color:#696c6d;font-size:12px;line-height:1.6}
 .notice-delete-name{width:100%;margin:0 0 22px;color:#202720;font-size:12px;line-height:1.5;overflow-wrap:anywhere}
 .notice-delete-dialog .modal-actions{width:100%;margin-top:0;gap:10px}
 .notice-delete-dialog .modal-actions .button{flex:1}
