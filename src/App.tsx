@@ -10,18 +10,20 @@ import {
   logout,
   onUnauthorized,
   publicFileUrl,
-  type Applicant,
-  type Appeal,
-  type Area,
-  type Notice,
-  type NoticeDetail,
-  type Profile,
-  type Recruitment,
-  type ReviewItem,
-  type StudentActivity,
-  type StudentMonth,
-  type WeeklyService,
 } from './api'
+import type {
+  Applicant,
+  Appeal,
+  Area,
+  Notice,
+  NoticeDetail,
+  Profile,
+  Recruitment,
+  ReviewItem,
+  StudentActivity,
+  StudentMonth,
+  WeeklyService,
+} from './types'
 import './App.css'
 
 type Page = 'today' | 'review' | 'appeals' | 'recruitment' | 'zones' | 'activity' | 'notices'
