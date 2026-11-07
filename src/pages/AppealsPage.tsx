@@ -4,6 +4,7 @@ import { publicFileUrl } from '../api'
 import { Card, CardTitle } from '../components/Card'
 import { Empty } from '../components/Empty'
 import { Status } from '../components/Status'
+import { APPEAL_STATUS_LABELS } from '../constants/status'
 
 export function Appeals({
   items,
@@ -39,7 +40,7 @@ export function Appeals({
                 {item.verificationDate} · {item.round}차 이의신청
               </small>
             </span>
-            <Status>{item.status}</Status>
+            <Status value={item.status} label={APPEAL_STATUS_LABELS[item.status]} />
           </button>
         ))}
         {!items.length && (

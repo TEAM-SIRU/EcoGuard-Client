@@ -13,7 +13,8 @@ import type {
 } from './types'
 
 const API_BASE = (
-  import.meta.env.VITE_API_BASE_URL ?? 'https://ecoguard.https.gsmsv.site/api/v1'
+  import.meta.env.VITE_API_BASE_URL ??
+  (import.meta.env.DEV ? '/api/v1' : 'https://ecoguard.https.gsmsv.site/api/v1')
 ).replace(/\/$/, '')
 
 type TokenPair = { accessToken: string; refreshToken: string }
@@ -224,7 +225,8 @@ export const api = {
 
 export function publicFileUrl(path: string) {
   try {
-    return new URL(path, `${API_BASE}/`).toString()
+    const base = new URL(API_BASE, window.location.origin)
+    return new URL(path, `${base.toString().replace(/\/$/, '')}/`).toString()
   } catch {
     return path
   }

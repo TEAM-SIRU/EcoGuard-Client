@@ -2,6 +2,8 @@
 
 ## Local setup
 
+Copy `.env.example` to `.env.local` before starting the dev server. Set `VITE_GSM_CLIENT_ID` to the DataGSM client ID. For local backend development, set `ECOGUARD_SERVER_URL` to the server address; Vite proxies `/api/v1` requests to it. The example defaults to `localhost:8080`.
+
 1. Set the build-time variable `VITE_API_BASE_URL=https://ecoguard.https.gsmsv.site/api/v1` for production.
 2. Set `VITE_GSM_AUTHORIZATION_URL` to the DataGSM authorization endpoint and `VITE_GSM_CLIENT_ID` to the web app's client ID.
 3. Register `https://ecoguard-web.https.gsmsv.site` as the DataGSM web redirect URI and use that exact URI for both authorization `redirect_uri` and `/auth/login` `redirectUri`. Do not add a trailing slash or callback path. The app reads `code` and `state` from the root page and sends the same URI as `redirectUri` to `/auth/login`.

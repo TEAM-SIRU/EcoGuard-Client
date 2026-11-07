@@ -491,24 +491,23 @@ td small {
   background: #f1f3f1;
   color: #788079;
 }
-.status-승인,
-.status-승인처리됨,
-.status-모집중 {
+.status-approved {
   background: #edf8eb;
   color: #39934a;
 }
-.status-수동검토,
-.status-검토대기,
-.status-처리중 {
+.status-pending,
+.status-processing,
+.status-manual-review {
   background: #fff5e9;
   color: #b47c37;
 }
-.status-반려,
-.status-반려처리됨 {
+.status-rejected {
   background: #fff0ee;
   color: #c1695c;
 }
-.status-모집마감 {
+.status-not-submitted,
+.status-upcoming,
+.status-unknown {
   background: #f1f3f1;
   color: #737c74;
 }
@@ -1767,13 +1766,13 @@ td small {
   background: #edf8eb;
   color: #57c144;
 }
-.dashboard-table .status-수동검토,
-.dashboard-table .status-처리중 {
+.dashboard-table .status-processing,
+.dashboard-table .status-manual-review {
   background: #edf8eb;
   color: #57c144;
 }
-.dashboard-table .status-미제출,
-.dashboard-table .status-반려 {
+.dashboard-table .status-not-submitted,
+.dashboard-table .status-rejected {
   background: #e3e5e4;
   color: #696c6d;
 }
