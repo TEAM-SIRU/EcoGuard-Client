@@ -29,6 +29,12 @@ import { navigation, pageSubtitles, pageTitles } from './constants/navigation'
 import type { Page } from './constants/navigation'
 import { STATUS_LABELS } from './constants/status'
 import type { TodayStatus } from './constants/status'
+import { Card, CardTitle } from './components/Card'
+import { Empty } from './components/Empty'
+import { InfoIcon, SproutIcon } from './components/icons'
+import { Modal } from './components/Modal'
+import { MonthPicker } from './components/MonthPicker'
+import { Status } from './components/Status'
 import { exportStudentsCsv } from './lib/csv'
 import { formatTime, getMonday, toDateKey } from './lib/date'
 import './App.css'
@@ -1168,133 +1174,6 @@ function Login({
     </>
   )
 }
-function SproutIcon() {
-  return (
-    <svg className="login-sprout-icon" viewBox="0 0 32 32" aria-hidden="true">
-      <path
-        d="M16 29V15"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-      />
-      <path
-        d="M15 16C8.8 16 5.4 12.8 5.2 7.2c5.8-.1 9.1 2.3 10 7.2"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M16 14.5C16 7.4 19.7 3.7 26.7 3.5c.3 6.9-3.1 10.6-10.1 11"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}
-function InfoIcon() {
-  return (
-    <svg className="login-info-icon" viewBox="0 0 20 20" aria-hidden="true">
-      <circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" strokeWidth="1.4" />
-      <path
-        d="M10 9v5m0-8h.01"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-      />
-    </svg>
-  )
-}
-
-function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return <section className={`card ${className}`}>{children}</section>
-}
-function CardTitle({
-  title,
-  detail,
-  action,
-}: {
-  title: string
-  detail?: string
-  action?: React.ReactNode
-}) {
-  return (
-    <div className="card-title">
-      <div>
-        <h2>{title}</h2>
-        {detail && <p>{detail}</p>}
-      </div>
-      {action}
-    </div>
-  )
-}
-function Status({ children }: { children: string }) {
-  return <span className={`status status-${children}`}>{children}</span>
-}
-function Empty({ title, detail }: { title: string; detail: string }) {
-  return (
-    <div className="empty-state">
-      <span>⌕</span>
-      <b>{title}</b>
-      <p>{detail}</p>
-    </div>
-  )
-}
-
-function MonthPicker({ value, onChange }: { value: Date; onChange: (month: Date) => void }) {
-  const inputRef = useRef<HTMLInputElement>(null)
-  const monthValue = `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}`
-  function shiftMonth(delta: number) {
-    onChange(new Date(value.getFullYear(), value.getMonth() + delta, 1, 12))
-  }
-  function openPicker() {
-    const input = inputRef.current
-    if (!input) return
-    if (typeof input.showPicker === 'function') input.showPicker()
-    else input.click()
-  }
-  return (
-    <div className="month-picker" aria-label="활동 기록 월 선택">
-      <button
-        type="button"
-        className="month-step"
-        aria-label="이전 달"
-        onClick={() => shiftMonth(-1)}
-      >
-        ‹
-      </button>
-      <button type="button" className="month-current" onClick={openPicker}>
-        {value.getFullYear()}년 {value.getMonth() + 1}월 <span aria-hidden="true">▾</span>
-      </button>
-      <button
-        type="button"
-        className="month-step"
-        aria-label="다음 달"
-        onClick={() => shiftMonth(1)}
-      >
-        ›
-      </button>
-      <input
-        ref={inputRef}
-        className="month-picker-native"
-        type="month"
-        aria-label="직접 월 선택"
-        value={monthValue}
-        onChange={(event) => {
-          const [year, month] = event.target.value.split('-').map(Number)
-          if (year && month) onChange(new Date(year, month - 1, 1, 12))
-        }}
-      />
-    </div>
-  )
-}
-
 type TodayStudent = {
   studentId: number
   studentNumber: string | null
@@ -2717,69 +2596,5 @@ function AssignmentForm({
         <button className="button primary">배정하기</button>
       </div>
     </form>
-  )
-}
-function Modal({
-  title,
-  children,
-  onClose,
-  isSaving = false,
-}: {
-  title: string
-  children: React.ReactNode
-  onClose: () => void
-  isSaving?: boolean
-}) {
-  const modalRef = useRef<HTMLDialogElement>(null)
-  const requestClose = useCallback(() => {
-    if (isSaving) return
-    const form = modalRef.current?.querySelector('form')
-    const dirty = form
-      ? Array.from(form.elements).some((element) => {
-          if (element instanceof HTMLInputElement)
-            return element.type === 'checkbox' || element.type === 'radio'
-              ? element.checked !== element.defaultChecked
-              : element.value !== element.defaultValue
-          if (element instanceof HTMLTextAreaElement) return element.value !== element.defaultValue
-          if (element instanceof HTMLSelectElement)
-            return Array.from(element.options).some(
-              (option) => option.selected !== option.defaultSelected,
-            )
-          return false
-        })
-      : false
-    if (dirty && !window.confirm('저장하지 않은 변경 사항이 있어요. 입력 내용을 버리고 닫을까요?'))
-      return
-    onClose()
-  }, [isSaving, onClose])
-  useEffect(() => {
-    window.addEventListener('close-modal', requestClose)
-    return () => window.removeEventListener('close-modal', requestClose)
-  }, [requestClose])
-  return (
-    <div
-      className="modal-backdrop"
-      role="presentation"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) requestClose()
-      }}
-    >
-      <dialog open ref={modalRef} className="modal" aria-modal="true" aria-labelledby="modal-title">
-        <div className="modal-head">
-          <div>
-            <h2 id="modal-title">{title}</h2>
-          </div>
-          <button
-            className="icon-btn"
-            aria-label="모달 닫기"
-            onClick={requestClose}
-            disabled={isSaving}
-          >
-            ×
-          </button>
-        </div>
-        {children}
-      </dialog>
-    </div>
   )
 }
