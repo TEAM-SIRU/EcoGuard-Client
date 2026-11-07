@@ -125,13 +125,11 @@ export default function App() {
       cleanTime: null,
       semester: '2026-2',
       isActive: true,
-      assignedStudents: previewTodayNames
-        .slice(0, 8)
-        .map((name, index) => ({
-          studentId: 301 + index,
-          studentNumber: `2-${index < 2 ? 1 : index < 5 ? 3 : 2}`,
-          name,
-        })),
+      assignedStudents: previewTodayNames.slice(0, 8).map((name, index) => ({
+        studentId: 301 + index,
+        studentNumber: `2-${index < 2 ? 1 : index < 5 ? 3 : 2}`,
+        name,
+      })),
     },
     {
       areaId: 32,
@@ -141,13 +139,11 @@ export default function App() {
       cleanTime: null,
       semester: '2026-2',
       isActive: true,
-      assignedStudents: previewTodayNames
-        .slice(8, 16)
-        .map((name, index) => ({
-          studentId: 309 + index,
-          studentNumber: `2-${(index % 4) + 1}`,
-          name,
-        })),
+      assignedStudents: previewTodayNames.slice(8, 16).map((name, index) => ({
+        studentId: 309 + index,
+        studentNumber: `2-${(index % 4) + 1}`,
+        name,
+      })),
     },
     {
       areaId: 33,
@@ -157,13 +153,11 @@ export default function App() {
       cleanTime: null,
       semester: '2026-2',
       isActive: true,
-      assignedStudents: previewTodayNames
-        .slice(16)
-        .map((name, index) => ({
-          studentId: 317 + index,
-          studentNumber: `2-${(index % 4) + 1}`,
-          name,
-        })),
+      assignedStudents: previewTodayNames.slice(16).map((name, index) => ({
+        studentId: 317 + index,
+        studentNumber: `2-${(index % 4) + 1}`,
+        name,
+      })),
     },
   ]
   const previewTodayReviews: ReviewItem[] = [
@@ -257,7 +251,6 @@ export default function App() {
     'idle' | 'loading' | 'ready' | 'error'
   >('idle')
   const [assignmentStudentsError, setAssignmentStudentsError] = useState('')
-  const [assignmentStudentsRetry, setAssignmentStudentsRetry] = useState(0)
   const [selectedReview, setSelectedReview] = useState<number | null>(null)
   const [selectedAppeal, setSelectedAppeal] = useState<number | null>(null)
   const [selectedRecruitment, setSelectedRecruitment] = useState<number | null>(null)
@@ -385,8 +378,11 @@ export default function App() {
   useEffect(() => {
     if (!authenticated || profile?.role !== 'TEACHER' || page !== 'zones' || designPreview) return
     let cancelled = false
-    setAssignmentStudentsStatus('loading')
-    setAssignmentStudentsError('')
+    queueMicrotask(() => {
+      if (cancelled) return
+      setAssignmentStudentsStatus('loading')
+      setAssignmentStudentsError('')
+    })
     api
       .searchStudents('')
       .then((students) => {
@@ -394,15 +390,30 @@ export default function App() {
         setAssignmentStudents(students)
         setAssignmentStudentsStatus('ready')
       })
-      .catch((error) => {
+      .catch((searchError) => {
         if (cancelled) return
-        setAssignmentStudentsError(errorMessage(error))
+        setAssignmentStudentsError(errorMessage(searchError))
         setAssignmentStudentsStatus('error')
       })
     return () => {
       cancelled = true
     }
-  }, [authenticated, profile, page, reloadKey, designPreview, assignmentStudentsRetry])
+  }, [authenticated, profile, page, designPreview])
+
+  function retryAssignmentStudents() {
+    setAssignmentStudentsStatus('loading')
+    setAssignmentStudentsError('')
+    api
+      .searchStudents('')
+      .then((students) => {
+        setAssignmentStudents(students)
+        setAssignmentStudentsStatus('ready')
+      })
+      .catch((searchError) => {
+        setAssignmentStudentsError(errorMessage(searchError))
+        setAssignmentStudentsStatus('error')
+      })
+  }
 
   const reviews = (data.reviews as ReviewItem[] | undefined) ?? EMPTY_REVIEWS
   const appeals = (data.appeals as Appeal[] | undefined) ?? EMPTY_APPEALS
@@ -569,6 +580,12 @@ export default function App() {
       setError('')
       try {
         await api.assignStudents(areaId, ids)
+        const assignedAreaName = areas.find((area) => area.areaId === areaId)?.name ?? '청소구역'
+        setAssignmentStudents((current) =>
+          current.map((student) =>
+            ids.includes(student.studentId) ? { ...student, area: assignedAreaName } : student,
+          ),
+        )
         toast.success(`${ids.length}명의 학생을 배정했어요.`)
         setModal(null)
         reload()
@@ -862,6 +879,11 @@ export default function App() {
                     }))
                   else {
                     await api.removeAssignment(area.areaId, student.studentId)
+                    setAssignmentStudents((current) =>
+                      current.map((person) =>
+                        person.studentId === student.studentId ? { ...person, area: null } : person,
+                      ),
+                    )
                     reload()
                   }
                   toast.success(`${student.name} 학생의 배정을 해제했어요.`)
@@ -981,7 +1003,7 @@ export default function App() {
               students={assignmentStudents}
               searchStatus={assignmentStudentsStatus}
               searchError={assignmentStudentsError}
-              onRetrySearch={() => setAssignmentStudentsRetry((value) => value + 1)}
+              onRetrySearch={retryAssignmentStudents}
               onSubmit={assignStudents}
             />
           ) : (
@@ -1349,10 +1371,7 @@ function Dashboard({
   const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 
   useEffect(() => {
-    if (preview) {
-      setWeeklyService(null)
-      return
-    }
+    if (preview) return
     let cancelled = false
     api
       .weeklyService()
@@ -1365,7 +1384,7 @@ function Dashboard({
     return () => {
       cancelled = true
     }
-  }, [preview, dateKey])
+  }, [preview])
 
   useEffect(() => {
     const roster = new Map<number, TodayStudent>()
@@ -1509,30 +1528,24 @@ function Dashboard({
     { label: '미제출', value: notSubmitted, target: 'activity' as Page, tone: '' },
   ]
   const latest = [
-    ...reviews
-      .slice(0, 2)
-      .map((item) => ({
-        type: `선생님 확인 · ${new Date(item.submittedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}`,
-        title: `${item.studentName} · ${item.areaName}`,
-        detail: item.reason || item.failReasons.join(', ') || 'AI가 판단하기 어려운 사진',
-        page: 'review' as Page,
-      })),
-    ...appeals
-      .slice(0, 1)
-      .map((item) => ({
-        type: '이의신청 · 확인 필요',
-        title: `${item.studentName} · ${item.areaName}`,
-        detail: item.content,
-        page: 'appeals' as Page,
-      })),
-    ...reviews
-      .slice(2)
-      .map((item) => ({
-        type: `선생님 확인 · ${new Date(item.submittedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}`,
-        title: `${item.studentName} · ${item.areaName}`,
-        detail: item.reason || item.failReasons.join(', ') || 'AI가 판단하기 어려운 사진',
-        page: 'review' as Page,
-      })),
+    ...reviews.slice(0, 2).map((item) => ({
+      type: `선생님 확인 · ${new Date(item.submittedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}`,
+      title: `${item.studentName} · ${item.areaName}`,
+      detail: item.reason || item.failReasons.join(', ') || 'AI가 판단하기 어려운 사진',
+      page: 'review' as Page,
+    })),
+    ...appeals.slice(0, 1).map((item) => ({
+      type: '이의신청 · 확인 필요',
+      title: `${item.studentName} · ${item.areaName}`,
+      detail: item.content,
+      page: 'appeals' as Page,
+    })),
+    ...reviews.slice(2).map((item) => ({
+      type: `선생님 확인 · ${new Date(item.submittedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}`,
+      title: `${item.studentName} · ${item.areaName}`,
+      detail: item.reason || item.failReasons.join(', ') || 'AI가 판단하기 어려운 사진',
+      page: 'review' as Page,
+    })),
   ].slice(0, 3)
   const pending = (student: TodayStudent) =>
     student.status === 'PROCESSING' || student.status === 'MANUAL_REVIEW'
@@ -2153,16 +2166,18 @@ function Zones({
           <Card className="zone-detail">
             <div className="zone-detail-title">
               <h2>{selected.name}</h2>
-              <label>
-                청소 구역
+              <div className="zone-toggle">
+                <span>청소 구역</span>
                 <button
                   className={`switch ${selected.isActive ? 'checked' : ''}`}
                   aria-label="구역 활성화"
+                  role="switch"
+                  aria-checked={selected.isActive}
                   onClick={() => onToggle(selected)}
                 >
                   <i />
                 </button>
-              </label>
+              </div>
             </div>
             <div className="zone-description">
               <b>구역 안내</b>
@@ -2467,6 +2482,7 @@ function Notices({
               <button
                 key={item.noticeId}
                 className={`notice-row ${selectedId === item.noticeId ? 'active' : ''}`}
+                aria-label={`공지 선택: ${item.title}`}
                 onClick={() => onSelect(item.noticeId)}
               >
                 <span>
@@ -2800,8 +2816,8 @@ function Modal({
   onClose: () => void
   isSaving?: boolean
 }) {
-  const modalRef = useRef<HTMLElement>(null)
-  function requestClose() {
+  const modalRef = useRef<HTMLDialogElement>(null)
+  const requestClose = useCallback(() => {
     if (isSaving) return
     const form = modalRef.current?.querySelector('form')
     const dirty = form
@@ -2821,35 +2837,35 @@ function Modal({
     if (dirty && !window.confirm('저장하지 않은 변경 사항이 있어요. 입력 내용을 버리고 닫을까요?'))
       return
     onClose()
-  }
+  }, [isSaving, onClose])
   useEffect(() => {
     window.addEventListener('close-modal', requestClose)
     return () => window.removeEventListener('close-modal', requestClose)
-  }, [onClose, isSaving])
+  }, [requestClose])
   return (
     <div
       className="modal-backdrop"
+      role="presentation"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) requestClose()
       }}
     >
-      <section
-        ref={modalRef}
-        className="modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="modal-title"
-      >
+      <dialog open ref={modalRef} className="modal" aria-modal="true" aria-labelledby="modal-title">
         <div className="modal-head">
           <div>
             <h2 id="modal-title">{title}</h2>
           </div>
-          <button className="icon-btn" onClick={requestClose} disabled={isSaving}>
+          <button
+            className="icon-btn"
+            aria-label="모달 닫기"
+            onClick={requestClose}
+            disabled={isSaving}
+          >
             ×
           </button>
         </div>
         {children}
-      </section>
+      </dialog>
     </div>
   )
 }
