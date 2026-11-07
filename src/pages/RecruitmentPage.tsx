@@ -94,9 +94,11 @@ export function Applicants({
 export function RecruitmentForm({
   initial,
   onSubmit,
+  onCancel,
 }: {
   initial: Recruitment | null
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void
+  onCancel: () => void
 }) {
   const [periodError, setPeriodError] = useState('')
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -191,11 +193,7 @@ export function RecruitmentForm({
         </label>
       </div>
       <div className="modal-actions">
-        <button
-          className="button secondary"
-          type="button"
-          onClick={() => window.dispatchEvent(new Event('close-modal'))}
-        >
+        <button className="button secondary" type="button" onClick={onCancel}>
           취소
         </button>
         <button className="button primary">{initial ? '수정 저장' : '등록하기'}</button>
