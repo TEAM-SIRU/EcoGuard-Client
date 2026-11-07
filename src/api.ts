@@ -227,6 +227,12 @@ export type StudentMonth = {
   };
   records: ActivityRecord[];
 };
+export type WeeklyService = {
+  weekStart: string;
+  weekEnd: string;
+  assignedCount: number;
+  days: { date: string; submittedCount: number; approvedCount: number; participationRate: number }[];
+};
 export type Notice = {
   noticeId: number;
   title: string;
@@ -316,6 +322,7 @@ export const api = {
     request<StudentMonth>(
       `/students/${id}/activities?year=${year}&month=${month}`,
     ),
+  weeklyService: () => request<WeeklyService>("/service-times/weekly"),
   notices: async () => {
     const items = await request<NoticeResponse[]>("/notices");
     return items.map(({ read, ...notice }) => ({ ...notice, isRead: read }));
