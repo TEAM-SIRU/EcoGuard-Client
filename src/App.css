@@ -496,3 +496,15 @@
   .app-shell .dashboard-side .card{padding:16px}
   .app-shell .week-card{height:170px!important}
 }
+
+@media(min-width:761px){
+  .app-shell .dashboard-side{height:444px;min-height:0}
+  .app-shell .attention-card{display:flex;flex:1 1 auto;flex-direction:column;min-height:0;overflow:hidden}
+  .app-shell .attention-list{min-height:0;overflow-y:auto}
+  .app-shell .week-card{flex:0 0 137px}
+}
+@media(max-width:760px){
+  .app-shell .dashboard-side{height:auto}
+  .app-shell .attention-card{max-height:340px;overflow:hidden}
+  .app-shell .attention-list{max-height:250px;overflow-y:auto}
+}
