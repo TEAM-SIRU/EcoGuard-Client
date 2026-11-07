@@ -40,6 +40,8 @@ export default function App() {
   const [reloadKey, setReloadKey] = useState(0)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const actionLocks = useRef(new Set<string>())
+  const requestSequence = useRef(new Map<string, number>())
   const [data, setData] = useState<Record<string, unknown>>(todayPreview ? { areas: previewTodayAreas, reviews: previewTodayReviews, appeals: previewTodayAppeals } : zonesPreview ? { areas: previewAreas } : noticeDeletePreview ? { notices: [previewNotice] } : {})
   const [selectedReview, setSelectedReview] = useState<number | null>(null)
   const [selectedAppeal, setSelectedAppeal] = useState<number | null>(null)
@@ -57,10 +59,17 @@ export default function App() {
   const [editingRecruitment, setEditingRecruitment] = useState<Recruitment | null>(null)
 
   const run = useCallback(async <T,>(key: string, fn: () => Promise<T>) => {
-    try { const result = await fn(); setData((current) => ({ ...current, [key]: result })); return result }
-    catch (e) { setError(errorMessage(e)); return null }
+    const sequence = (requestSequence.current.get(key) ?? 0) + 1
+    requestSequence.current.set(key, sequence)
+    try { const result = await fn(); if (requestSequence.current.get(key) !== sequence) return null; setData((current) => ({ ...current, [key]: result })); return result }
+    catch (e) { if (requestSequence.current.get(key) === sequence) setError(errorMessage(e)); return null }
   }, [])
   const reload = useCallback(() => setReloadKey((n) => n + 1), [])
+  async function runOnce(key: string, action: () => Promise<void>) {
+    if (actionLocks.current.has(key)) return
+    actionLocks.current.add(key)
+    try { await action() } finally { actionLocks.current.delete(key) }
+  }
 
   useEffect(() => designPreview ? undefined : onUnauthorized(() => { setAuthenticated(false); setProfile(null); setError('로그인이 만료됐어요. 다시 로그인해 주세요.') }), [designPreview])
   useEffect(() => { if (authenticated && error) toast.error(error) }, [authenticated, error])
@@ -141,6 +150,7 @@ export default function App() {
     event.preventDefault(); const form = new FormData(event.currentTarget)
     const semester = String(form.get('semester')); const grade = Number(form.get('grade')); const classNo = Number(form.get('classNo')); const maxCount = Number(form.get('maxCount'))
     const startDate = `${form.get('startDate')}T00:00:00`; const endDate = `${form.get('endDate')}T23:59:59`
+    await runOnce(`recruitment:${editingRecruitment?.recruitmentId ?? 'new'}`, async () => {
     setLoading(true); setError('')
     try {
       if (editingRecruitment) await api.updateRecruitment(editingRecruitment.recruitmentId, { maxCount, startDate, endDate })
@@ -148,22 +158,29 @@ export default function App() {
       toast.success(editingRecruitment ? '모집 공고를 수정했어요.' : '모집 공고를 등록했어요.')
       setModal(null); setEditingRecruitment(null); reload()
     } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) }
+    })
   }
   async function toggleArea(area: Area) {
+    await runOnce(`area:${area.areaId}:toggle`, async () => {
     setLoading(true); setError('')
     try { await api.updateArea(area.areaId, !area.isActive); toast.success(area.isActive ? '청소구역을 비활성화했어요.' : '청소구역을 활성화했어요.'); reload() } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) }
+    })
   }
   async function assignStudents(event: React.FormEvent<HTMLFormElement>, ids: number[]) {
     event.preventDefault(); const form = new FormData(event.currentTarget); const areaId = Number(form.get('areaId'))
-    if (!ids.length) { setError('배정할 학생을 선택해 주세요.'); return }
+    if (!ids.length) { toast.error('배정할 학생을 선택해 주세요.'); return }
+    await runOnce(`assign:${areaId}`, async () => {
     setLoading(true); setError('')
     try { await api.assignStudents(areaId, ids); toast.success(`${ids.length}명의 학생을 배정했어요.`); setModal(null); reload() } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) }
+    })
   }
   async function saveNotice(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); const form = new FormData(event.currentTarget); const title = String(form.get('title') ?? '').trim(); const content = String(form.get('content') ?? '').trim()
-    if (!title || !content) { setError('제목과 내용을 입력해 주세요.'); return }
+    if (!title || !content) { toast.error('제목과 내용을 입력해 주세요.'); return }
+    await runOnce('notice:create', async () => {
     setLoading(true); setError('')
     try { await api.createNotice(title, content); toast.success('공지를 등록했어요.'); setModal(null); reload() } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) }
+    })
   }
 
   if (!authenticated) return <Login onLogin={handleLogin} loading={loading} error={error} />
@@ -177,12 +194,12 @@ export default function App() {
     <main className="main-area"><div className="page-content"><div className={`page-title-row ${page === 'today' ? 'dashboard-page-title' : ''}`}><div>{page === 'today' && <span className="date-label">{now.toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short' })}</span>}<h1>{selectedStudent && page === 'activity' ? `${selectedStudent.name} 활동 기록` : page === 'recruitment' && selectedRecruitment !== null ? '모집 신청자 관리' : title}</h1>{page !== 'today' && <p className="page-subtitle">{selectedStudent && page === 'activity' ? `${selectedStudent.studentNumber ?? ''} · 승인 인증을 기준으로 활동 시간을 확인해요.` : pageSubtitles[page]}</p>}</div>{page === 'recruitment' && selectedRecruitment === null && <button className="button primary" onClick={() => { setEditingRecruitment(null); setModal('recruit') }}>＋ 새 모집 공고</button>}{page === 'notices' && <button className="button primary" onClick={() => setModal('notice')}>＋ 새 공지</button>}{page === 'activity' && <div className="page-header-actions"><MonthPicker value={month} onChange={(value) => void changeMonth(value)} /><button className="button secondary" onClick={() => exportStudentsCsv(students)}>엑셀로 내보내기</button></div>}</div>
       {loading && <div className="loading-line">서버에서 최신 정보를 불러오는 중…</div>}
       {page === 'today' && <Dashboard reviews={reviews} appeals={appeals} areas={areas} date={now} preview={todayPreview} onNavigate={setPage} />}
-      {page === 'review' && <Review items={reviews} selectedId={activeReviewId} onSelect={setSelectedReview} onDecide={async (item, decision, reason) => { setLoading(true); setError(''); try { await api.decideReview(item.verificationId, decision, reason); toast.success(decision === 'APPROVED' ? '인증을 승인했어요.' : '인증을 반려했어요.'); reload() } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) } }} />}
-      {page === 'appeals' && <Appeals items={appeals} selectedId={activeAppealId} onSelect={setSelectedAppeal} onDecide={async (item, decision, reply) => { setLoading(true); setError(''); try { await api.decideAppeal(item.appealId, decision, reply, decision === 'APPROVED' ? '이의신청이 승인되었어요' : '이의신청 검토 결과'); toast.success(decision === 'APPROVED' ? '이의신청을 승인했어요.' : '이의신청을 반려했어요.'); reload() } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) } }} />}
+      {page === 'review' && <Review items={reviews} selectedId={activeReviewId} onSelect={setSelectedReview} onDecide={async (item, decision, reason) => { await runOnce(`review:${item.verificationId}`, async () => { setLoading(true); setError(''); try { await api.decideReview(item.verificationId, decision, reason); setData((current) => ({ ...current, reviews: ((current.reviews as ReviewItem[] | undefined) ?? []).filter((review) => review.verificationId !== item.verificationId) })); setSelectedReview(null); toast.success(decision === 'APPROVED' ? '인증을 승인했어요.' : '인증을 반려했어요.'); reload() } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) } }) }} />}
+      {page === 'appeals' && <Appeals items={appeals} selectedId={activeAppealId} onSelect={setSelectedAppeal} onDecide={async (item, decision, reply) => { await runOnce(`appeal:${item.appealId}`, async () => { setLoading(true); setError(''); try { await api.decideAppeal(item.appealId, decision, reply, decision === 'APPROVED' ? '이의신청이 승인되었어요' : '이의신청 검토 결과'); setData((current) => ({ ...current, appeals: ((current.appeals as Appeal[] | undefined) ?? []).filter((appeal) => appeal.appealId !== item.appealId) })); setSelectedAppeal(null); toast.success(decision === 'APPROVED' ? '이의신청을 승인했어요.' : '이의신청을 반려했어요.'); reload() } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) } }) }} />}
       {page === 'recruitment' && (selectedRecruitment !== null ? <Applicants id={selectedRecruitment} items={applicants} onBack={() => setSelectedRecruitment(null)} /> : <Recruitment items={recruitments} onApplicants={openApplicants} onEdit={(item) => { setEditingRecruitment(item); setModal('recruit') }} />)}
       {page === 'zones' && <Zones areas={areas} onToggle={toggleArea} onAssign={(area) => { setData((current) => ({ ...current, assignmentArea: area })); setModal('assign') }} onRemove={async (area, student) => { setLoading(true); setError(''); try { if (zonesPreview) setData((current) => ({ ...current, areas: (current.areas as Area[]).map((item) => item.areaId === area.areaId ? { ...item, assignedStudents: item.assignedStudents.filter((person) => person.studentId !== student.studentId) } : item) })); else { await api.removeAssignment(area.areaId, student.studentId); reload() } toast.success(`${student.name} 학생의 배정을 해제했어요.`) } catch (e) { if (e instanceof ApiError && e.status === 404 && e.code === 'ASSIGNMENT_NOT_FOUND') { setError('이 학생은 이미 배정 해제됐어요. 목록을 새로고침했어요.'); reload(); return } setError(errorMessage(e)); throw e } finally { setLoading(false) } }} />}
       {page === 'activity' && (selectedStudent ? <StudentDetail student={selectedStudent} month={studentMonth} selectedMonth={month} onBack={() => { setSelectedStudent(null); setStudentMonth(null) }} /> : <Activity students={students} keyword={keyword} onSearch={(value) => { setData((current) => ({ ...current, students: [] })); setError(''); setKeyword(value) }} sort={sort} onSort={setSort} onSelect={(student) => void openStudent(student)} />)}
-      {page === 'notices' && <Notices items={notices} detail={noticeDetail?.noticeId === activeNoticeId ? noticeDetail : null} selectedId={activeNoticeId} onSelect={setSelectedNotice} onSave={async (detail) => { setLoading(true); setError(''); try { await api.updateNotice(detail.noticeId, detail.title, detail.content); toast.success('공지를 수정했어요.'); reload() } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) } }} onDelete={async (id) => { if (noticeDeletePreview) return; setLoading(true); setError(''); try { await api.deleteNotice(id); setData((current) => ({ ...current, notices: ((current.notices as Notice[] | undefined) ?? []).filter((item) => item.noticeId !== id) })); setNoticeDetail(null); setSelectedNotice(null); toast.success('공지를 삭제했어요.'); reload() } catch (e) { setError(errorMessage(e)); throw e } finally { setLoading(false) } }} />}
+      {page === 'notices' && <Notices items={notices} detail={noticeDetail?.noticeId === activeNoticeId ? noticeDetail : null} selectedId={activeNoticeId} onSelect={setSelectedNotice} onSave={async (detail) => { await runOnce(`notice:update:${detail.noticeId}`, async () => { setLoading(true); setError(''); try { await api.updateNotice(detail.noticeId, detail.title, detail.content); toast.success('공지를 수정했어요.'); reload() } catch (e) { setError(errorMessage(e)) } finally { setLoading(false) } }) }} onDelete={async (id) => { if (noticeDeletePreview) return; await runOnce(`notice:delete:${id}`, async () => { setLoading(true); setError(''); try { await api.deleteNotice(id); setData((current) => ({ ...current, notices: ((current.notices as Notice[] | undefined) ?? []).filter((item) => item.noticeId !== id) })); setNoticeDetail(null); setSelectedNotice(null); toast.success('공지를 삭제했어요.'); reload() } catch (e) { setError(errorMessage(e)); throw e } finally { setLoading(false) } }) }} />}
     </div></main>
     {modal && <Modal title={modal === 'recruit' ? (editingRecruitment ? '모집 공고 수정' : '모집 공고 등록') : modal === 'assign' ? '학생 배정' : '새 공지'} onClose={() => setModal(null)}>{modal === 'recruit' ? <RecruitmentForm initial={editingRecruitment} onSubmit={saveRecruitment} /> : modal === 'assign' ? <AssignmentForm areas={areas} selectedArea={data.assignmentArea as Area | undefined} onSubmit={assignStudents} /> : <form onSubmit={saveNotice}><label>제목<input name="title" required /></label><label>내용<textarea name="content" rows={7} required /></label><div className="modal-actions"><button className="button secondary" type="button" onClick={() => setModal(null)}>취소</button><button className="button primary" disabled={loading}>저장하고 올리기</button></div></form>}</Modal>}
     {logoutConfirm && <Modal title="로그아웃하시겠어요?" onClose={() => setLogoutConfirm(false)}><div className="logout-confirm"><p>관리자 페이지에서 로그아웃합니다.</p><div className="modal-actions"><button className="button secondary" onClick={() => setLogoutConfirm(false)}>취소</button><button className="button primary" onClick={() => void handleLogout()}>로그아웃</button></div></div></Modal>}
