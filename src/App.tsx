@@ -37,6 +37,7 @@ import { MonthPicker } from './components/MonthPicker'
 import { Status } from './components/Status'
 import { exportStudentsCsv } from './lib/csv'
 import { formatTime, getMonday, toDateKey } from './lib/date'
+import { createPreviewData } from './mocks/preview'
 import './App.css'
 
 const EMPTY_REVIEWS: ReviewItem[] = []
@@ -53,155 +54,7 @@ export default function App() {
   const zonesPreview = import.meta.env.DEV && previewParams.get('admin-preview') === 'zones'
   const todayPreview = import.meta.env.DEV && previewParams.get('admin-preview') === 'today'
   const designPreview = import.meta.env.DEV && previewParams.has('admin-preview')
-  const previewNotice: Notice = {
-    noticeId: 1,
-    title: '아침 청소 활동 안내',
-    preview: '이번 주 아침 청소 활동 안내입니다.',
-    isRead: true,
-    createdAt: now.toISOString(),
-  }
-  const previewAreas: Area[] = [
-    {
-      areaId: 21,
-      zoneCode: 'main_corridor_f2',
-      name: '2층 복도',
-      description: '복도와 계단 주변을 깨끗하게 관리해요.',
-      cleanTime: '08:00–08:30',
-      semester: '2026-2',
-      isActive: true,
-      assignedStudents: [
-        { studentId: 101, studentNumber: '2-3', name: '김하늘' },
-        { studentId: 102, studentNumber: '2-3', name: '박지우' },
-        { studentId: 103, studentNumber: '2-4', name: '이서윤' },
-      ],
-    },
-  ]
-  const previewTodayNames = [
-    '김서현',
-    '이도윤',
-    '최민준',
-    '김민서',
-    '박지호',
-    '정하은',
-    '오태윤',
-    '한지우',
-    '서민재',
-    '유나연',
-    '강민호',
-    '윤서아',
-    '백지훈',
-    '임수빈',
-    '조현우',
-    '최서윤',
-    '문예린',
-    '장민재',
-    '신하윤',
-    '황도현',
-    '안유진',
-    '송지호',
-    '전하린',
-    '홍서준',
-  ]
-  const previewTodayAreas: Area[] = [
-    {
-      areaId: 31,
-      zoneCode: 'hallway_f2_a',
-      name: '본관 2층 복도 A',
-      description: null,
-      cleanTime: null,
-      semester: '2026-2',
-      isActive: true,
-      assignedStudents: previewTodayNames.slice(0, 8).map((name, index) => ({
-        studentId: 301 + index,
-        studentNumber: `2-${index < 2 ? 1 : index < 5 ? 3 : 2}`,
-        name,
-      })),
-    },
-    {
-      areaId: 32,
-      zoneCode: 'stairs_f2',
-      name: '본관 2층 계단',
-      description: null,
-      cleanTime: null,
-      semester: '2026-2',
-      isActive: true,
-      assignedStudents: previewTodayNames.slice(8, 16).map((name, index) => ({
-        studentId: 309 + index,
-        studentNumber: `2-${(index % 4) + 1}`,
-        name,
-      })),
-    },
-    {
-      areaId: 33,
-      zoneCode: 'restroom_f2',
-      name: '본관 2층 화장실',
-      description: null,
-      cleanTime: null,
-      semester: '2026-2',
-      isActive: true,
-      assignedStudents: previewTodayNames.slice(16).map((name, index) => ({
-        studentId: 317 + index,
-        studentNumber: `2-${(index % 4) + 1}`,
-        name,
-      })),
-    },
-  ]
-  const previewTodayReviews: ReviewItem[] = [
-    {
-      verificationId: 901,
-      studentName: '이도윤',
-      areaName: '본관 2층 복도 A',
-      photoUrl: '',
-      submittedAt: `${now.toISOString().slice(0, 10)}T08:04:00`,
-      reason: null,
-      failReasons: [],
-    },
-    {
-      verificationId: 902,
-      studentName: '김민서',
-      areaName: '본관 2층 복도 A',
-      photoUrl: '',
-      submittedAt: `${now.toISOString().slice(0, 10)}T07:52:00`,
-      reason: '구역이 사진에 충분히 보이지 않음',
-      failReasons: [],
-    },
-    {
-      verificationId: 903,
-      studentName: '서민재',
-      areaName: '본관 2층 계단',
-      photoUrl: '',
-      submittedAt: `${now.toISOString().slice(0, 10)}T07:58:00`,
-      reason: null,
-      failReasons: [],
-    },
-  ]
-  const previewTodayAppeals: Appeal[] = [
-    {
-      appealId: 801,
-      verificationId: 803,
-      round: 1,
-      studentName: '박지호',
-      studentNumber: '2-3',
-      areaName: '본관 2층 복도 A',
-      verificationDate: now.toISOString().slice(0, 10),
-      photoUrl: '',
-      failReasons: [],
-      content: '청소까지 했는데 반려됐어요',
-      photoUrls: [],
-      status: 'PENDING',
-      replyTitle: null,
-      reply: null,
-      createdAt: now.toISOString(),
-    },
-  ]
-  const previewNoticeDetail: NoticeDetail = {
-    noticeId: 1,
-    title: previewNotice.title,
-    content: previewNotice.preview,
-    createdAt: previewNotice.createdAt,
-    previousNoticeId: null,
-    nextNoticeId: null,
-  }
+  const previewData = designPreview ? createPreviewData(now) : null
   const [authenticated, setAuthenticated] = useState(hasSession() || designPreview)
   const [profile, setProfile] = useState<Profile | null>(
     designPreview
@@ -225,11 +78,15 @@ export default function App() {
   const requestSequence = useRef(new Map<string, number>())
   const [data, setData] = useState<Record<string, unknown>>(
     todayPreview
-      ? { areas: previewTodayAreas, reviews: previewTodayReviews, appeals: previewTodayAppeals }
+      ? {
+          areas: previewData?.todayAreas ?? [],
+          reviews: previewData?.todayReviews ?? [],
+          appeals: previewData?.todayAppeals ?? [],
+        }
       : zonesPreview
-        ? { areas: previewAreas }
+        ? { areas: previewData?.areas ?? [] }
         : noticeDeletePreview
-          ? { notices: [previewNotice] }
+          ? { notices: previewData?.notice ? [previewData.notice] : [] }
           : {},
   )
   const [assignmentStudents, setAssignmentStudents] = useState<StudentActivity[]>([])
@@ -247,10 +104,10 @@ export default function App() {
   const [studentMonth, setStudentMonth] = useState<StudentMonth | null>(null)
   const [month, setMonth] = useState(() => new Date())
   const [selectedNotice, setSelectedNotice] = useState<number | null>(
-    noticeDeletePreview ? previewNotice.noticeId : null,
+    noticeDeletePreview ? (previewData?.notice.noticeId ?? null) : null,
   )
   const [noticeDetail, setNoticeDetail] = useState<NoticeDetail | null>(
-    noticeDeletePreview ? previewNoticeDetail : null,
+    noticeDeletePreview ? (previewData?.noticeDetail ?? null) : null,
   )
   const [modal, setModal] = useState<'recruit' | 'assign' | 'notice' | null>(null)
   const [logoutConfirm, setLogoutConfirm] = useState(false)
@@ -750,6 +607,7 @@ export default function App() {
               areas={areas}
               date={now}
               preview={todayPreview}
+              previewStatuses={previewData?.todayStatuses ?? []}
               onNavigate={setPage}
             />
           )}
@@ -1190,6 +1048,7 @@ function Dashboard({
   areas,
   date,
   preview = false,
+  previewStatuses,
   onNavigate,
 }: {
   reviews: ReviewItem[]
@@ -1197,6 +1056,7 @@ function Dashboard({
   areas: Area[]
   date: Date
   preview?: boolean
+  previewStatuses: TodayStatus[]
   onNavigate: (page: Page) => void
 }) {
   const [todayStudents, setTodayStudents] = useState<TodayStudent[]>([])
@@ -1235,32 +1095,6 @@ function Dashboard({
     )
     const students = [...roster.values()]
     if (preview) {
-      const demoStatuses: TodayStatus[] = [
-        'APPROVED',
-        'MANUAL_REVIEW',
-        'NOT_SUBMITTED',
-        'MANUAL_REVIEW',
-        'APPROVED',
-        'APPROVED',
-        'REJECTED',
-        'NOT_SUBMITTED',
-        'MANUAL_REVIEW',
-        'APPROVED',
-        'APPROVED',
-        'APPROVED',
-        'APPROVED',
-        'APPROVED',
-        'APPROVED',
-        'APPROVED',
-        'APPROVED',
-        'APPROVED',
-        'APPROVED',
-        'APPROVED',
-        'NOT_SUBMITTED',
-        'NOT_SUBMITTED',
-        'NOT_SUBMITTED',
-        'NOT_SUBMITTED',
-      ]
       const monday = getMonday(date)
       const previewResults: TodayStudent[] = students.map((student, index) => {
         const records: StudentMonth['records'] = Array.from({ length: 5 }, (_, dayIndex) => {
@@ -1277,7 +1111,7 @@ function Dashboard({
             minutes: submitted ? 10 : 0,
           }
         })
-        return { ...student, status: demoStatuses[index] ?? 'NOT_SUBMITTED', records }
+        return { ...student, status: previewStatuses[index] ?? 'NOT_SUBMITTED', records }
       })
       void Promise.resolve().then(() => {
         setTodayStudents(previewResults)
@@ -1336,7 +1170,7 @@ function Dashboard({
     return () => {
       cancelled = true
     }
-  }, [areas, dateKey, date, preview])
+  }, [areas, dateKey, date, preview, previewStatuses])
 
   const submitted = todayStudents.filter((student) =>
     ['APPROVED', 'REJECTED', 'PROCESSING', 'MANUAL_REVIEW'].includes(student.status),
