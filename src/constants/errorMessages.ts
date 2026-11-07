@@ -1,0 +1,15 @@
+export const ERROR_MESSAGES: Record<string, string> = {
+  RECRUITMENT_FULL: '모집 인원이 이미 마감됐어요.',
+  INVALID_PERIOD: '모집 기간을 확인해 주세요.',
+  INVALID_MAX_COUNT: '모집 인원은 반별 최대 6명이에요.',
+  RECRUITMENT_CLOSED: '모집이 종료되어 수정할 수 없어요.',
+  MAX_COUNT_BELOW_APPLICANTS: '현재 신청자 수보다 적게 정원을 설정할 수 없어요.',
+  INACTIVE_AREA: '비활성 구역에는 학생을 배정할 수 없어요.',
+  ZONE_MODEL_NOT_READY: 'AI 검수가 준비되지 않은 구역은 활성화할 수 없어요.',
+  ASSIGNMENT_NOT_FOUND: '이미 배정이 해제된 학생이에요.',
+  ALREADY_ASSIGNED: '이미 다른 구역에 배정된 학생입니다. 기존 배정을 해제한 뒤 다시 배정해 주세요.',
+  ALREADY_PROCESSED: '이미 처리된 요청이에요.',
+  NOT_MANUAL_REVIEW: '수동 검토 대기 상태가 아니에요.',
+  OAUTH_FAILED: 'DataGSM 로그인을 확인해 주세요.',
+  UNAUTHORIZED: '로그인이 만료됐어요. 다시 로그인해 주세요.',
+}

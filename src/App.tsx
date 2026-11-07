@@ -24,43 +24,19 @@ import type {
   StudentMonth,
   WeeklyService,
 } from './types'
+import { ERROR_MESSAGES } from './constants/errorMessages'
+import { navigation, pageSubtitles, pageTitles } from './constants/navigation'
+import type { Page } from './constants/navigation'
+import { STATUS_LABELS } from './constants/status'
+import type { TodayStatus } from './constants/status'
 import './App.css'
 
-type Page = 'today' | 'review' | 'appeals' | 'recruitment' | 'zones' | 'activity' | 'notices'
-const navigation: { id: Page; icon: string; label: string }[] = [
-  { id: 'today', icon: '⌂', label: '오늘 현황' },
-  { id: 'review', icon: '▣', label: '인증 검수' },
-  { id: 'appeals', icon: '↗', label: '이의신청' },
-  { id: 'zones', icon: '⌖', label: '청소구역' },
-  { id: 'activity', icon: '▤', label: '학생 · 활동 기록' },
-  { id: 'notices', icon: '▧', label: '공지 관리' },
-  { id: 'recruitment', icon: '♧', label: '모집 관리' },
-]
-const pageTitles: Record<Page, string> = {
-  today: '오늘 현황',
-  review: '인증 검수',
-  appeals: '이의신청',
-  recruitment: '모집 관리',
-  zones: '청소구역 관리',
-  activity: '학생 · 활동 기록',
-  notices: '공지 관리',
-}
 const EMPTY_REVIEWS: ReviewItem[] = []
 const EMPTY_APPEALS: Appeal[] = []
 const EMPTY_RECRUITMENTS: Recruitment[] = []
 const EMPTY_AREAS: Area[] = []
 const EMPTY_STUDENTS: StudentActivity[] = []
 const EMPTY_NOTICES: Notice[] = []
-const pageSubtitles: Record<Page, string> = {
-  today: '서버에 저장된 운영 현황을 확인해요.',
-  review: 'AI가 판단하기 어려워 넘어온 사진이에요. 확인하면 학생 앱에 바로 결과가 보여요.',
-  appeals: '학생이 제출한 이의신청을 확인하고 처리해요.',
-  recruitment: '선착순 신청 현황과 모집 기간을 관리해요.',
-  zones: '도면에서 청소구역을 활성화하고 담당 학생을 배정해요.',
-  activity: '승인된 인증 1회당 10분을 활동 시간에 쌓아요. 행을 누르면 학생 상세로 가요.',
-  notices: '학생 앱에 게시되는 공지를 관리해요.',
-}
-
 export default function App() {
   const [now] = useState(() => new Date())
   const previewParams = new URLSearchParams(window.location.search)
@@ -1051,23 +1027,7 @@ export default function App() {
 
 function errorMessage(error: unknown) {
   if (error instanceof ApiError) {
-    const translated: Record<string, string> = {
-      RECRUITMENT_FULL: '모집 인원이 이미 마감됐어요.',
-      INVALID_PERIOD: '모집 기간을 확인해 주세요.',
-      INVALID_MAX_COUNT: '모집 인원은 반별 최대 6명이에요.',
-      RECRUITMENT_CLOSED: '모집이 종료되어 수정할 수 없어요.',
-      MAX_COUNT_BELOW_APPLICANTS: '현재 신청자 수보다 적게 정원을 설정할 수 없어요.',
-      INACTIVE_AREA: '비활성 구역에는 학생을 배정할 수 없어요.',
-      ZONE_MODEL_NOT_READY: 'AI 검수가 준비되지 않은 구역은 활성화할 수 없어요.',
-      ASSIGNMENT_NOT_FOUND: '이미 배정이 해제된 학생이에요.',
-      ALREADY_ASSIGNED:
-        '이미 다른 구역에 배정된 학생입니다. 기존 배정을 해제한 뒤 다시 배정해 주세요.',
-      ALREADY_PROCESSED: '이미 처리된 요청이에요.',
-      NOT_MANUAL_REVIEW: '수동 검토 대기 상태가 아니에요.',
-      OAUTH_FAILED: 'DataGSM 로그인을 확인해 주세요.',
-      UNAUTHORIZED: '로그인이 만료됐어요. 다시 로그인해 주세요.',
-    }
-    return error.code && translated[error.code] ? translated[error.code] : error.message
+    return error.code && ERROR_MESSAGES[error.code] ? ERROR_MESSAGES[error.code] : error.message
   }
   return error instanceof Error ? error.message : '요청을 처리하지 못했어요.'
 }
@@ -1333,14 +1293,6 @@ function MonthPicker({ value, onChange }: { value: Date; onChange: (month: Date)
   )
 }
 
-type TodayStatus =
-  | 'APPROVED'
-  | 'REJECTED'
-  | 'PROCESSING'
-  | 'MANUAL_REVIEW'
-  | 'NOT_SUBMITTED'
-  | 'UPCOMING'
-  | 'UNKNOWN'
 type TodayStudent = {
   studentId: number
   studentNumber: string | null
@@ -1575,15 +1527,6 @@ function Dashboard({
       todayFilter === 'ALL' ||
       (todayFilter === 'PENDING' ? pending(student) : student.status === todayFilter),
   )
-  const statusLabels: Record<TodayStatus, string> = {
-    APPROVED: '승인',
-    REJECTED: '반려',
-    PROCESSING: '확인 대기',
-    MANUAL_REVIEW: '확인 대기',
-    NOT_SUBMITTED: '미제출',
-    UPCOMING: '예정',
-    UNKNOWN: '확인 불가',
-  }
   const weekDays = Array.from({ length: 5 }, (_, index) => {
     const monday = new Date(date)
     monday.setDate(date.getDate() - ((date.getDay() + 6) % 7))
@@ -1664,8 +1607,8 @@ function Dashboard({
                       <td>{student.area}</td>
                       <td>{submittedAt}</td>
                       <td>
-                        <span className={`status status-${statusLabels[student.status]}`}>
-                          {statusLabels[student.status]}
+                        <span className={`status status-${STATUS_LABELS[student.status]}`}>
+                          {STATUS_LABELS[student.status]}
                         </span>
                       </td>
                     </tr>
@@ -2438,18 +2381,7 @@ function StudentDetail({
   )
 }
 function translateResult(result: string) {
-  return (
-    (
-      {
-        APPROVED: '승인',
-        REJECTED: '반려',
-        PROCESSING: '검수 중',
-        MANUAL_REVIEW: '수동 검토',
-        NOT_SUBMITTED: '미제출',
-        UPCOMING: '예정',
-      } as Record<string, string>
-    )[result] ?? result
-  )
+  return STATUS_LABELS[result as TodayStatus] ?? result
 }
 
 function Notices({
