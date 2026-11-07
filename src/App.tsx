@@ -29,6 +29,8 @@ import { navigation, pageSubtitles, pageTitles } from './constants/navigation'
 import type { Page } from './constants/navigation'
 import { STATUS_LABELS } from './constants/status'
 import type { TodayStatus } from './constants/status'
+import { exportStudentsCsv } from './lib/csv'
+import { formatTime, getMonday, toDateKey } from './lib/date'
 import './App.css'
 
 const EMPTY_REVIEWS: ReviewItem[] = []
@@ -1322,7 +1324,7 @@ function Dashboard({
   const [todayLoading, setTodayLoading] = useState(false)
   const [weeklyService, setWeeklyService] = useState<WeeklyService | null>(null)
   const [todayFilter, setTodayFilter] = useState<TodayFilter>('ALL')
-  const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+  const dateKey = toDateKey(date)
 
   useEffect(() => {
     if (preview) return
@@ -1380,13 +1382,12 @@ function Dashboard({
         'NOT_SUBMITTED',
         'NOT_SUBMITTED',
       ]
-      const monday = new Date(date)
-      monday.setDate(date.getDate() - ((date.getDay() + 6) % 7))
+      const monday = getMonday(date)
       const previewResults: TodayStudent[] = students.map((student, index) => {
         const records: StudentMonth['records'] = Array.from({ length: 5 }, (_, dayIndex) => {
           const day = new Date(monday)
           day.setDate(monday.getDate() + dayIndex)
-          const recordDate = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`
+          const recordDate = toDateKey(day)
           const submitted = index < [22, 21, 18, 0, 0][dayIndex]
           return {
             date: recordDate,
@@ -1483,7 +1484,7 @@ function Dashboard({
   ]
   const latest = [
     ...reviews.slice(0, 2).map((item) => ({
-      type: `선생님 확인 · ${new Date(item.submittedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}`,
+      type: `선생님 확인 · ${formatTime(item.submittedAt)}`,
       title: `${item.studentName} · ${item.areaName}`,
       detail: item.reason || item.failReasons.join(', ') || 'AI가 판단하기 어려운 사진',
       page: 'review' as Page,
@@ -1495,7 +1496,7 @@ function Dashboard({
       page: 'appeals' as Page,
     })),
     ...reviews.slice(2).map((item) => ({
-      type: `선생님 확인 · ${new Date(item.submittedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}`,
+      type: `선생님 확인 · ${formatTime(item.submittedAt)}`,
       title: `${item.studentName} · ${item.areaName}`,
       detail: item.reason || item.failReasons.join(', ') || 'AI가 판단하기 어려운 사진',
       page: 'review' as Page,
@@ -1528,11 +1529,10 @@ function Dashboard({
       (todayFilter === 'PENDING' ? pending(student) : student.status === todayFilter),
   )
   const weekDays = Array.from({ length: 5 }, (_, index) => {
-    const monday = new Date(date)
-    monday.setDate(date.getDate() - ((date.getDay() + 6) % 7))
+    const monday = getMonday(date)
     const day = new Date(monday)
     day.setDate(monday.getDate() + index)
-    const key = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`
+    const key = toDateKey(day)
     const active = todayStudents.filter((student) =>
       student.records.some((record) => record.date === key && record.result !== 'NOT_SUBMITTED'),
     ).length
@@ -1592,12 +1592,7 @@ function Dashboard({
                   const review = reviews.find(
                     (item) => item.studentName === student.name && item.areaName === student.area,
                   )
-                  const submittedAt = review
-                    ? new Date(review.submittedAt).toLocaleTimeString('ko-KR', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })
-                    : '—'
+                  const submittedAt = review ? formatTime(review.submittedAt) : '—'
                   return (
                     <tr key={student.studentId}>
                       <td>
@@ -1706,11 +1701,7 @@ function Review({
               {review.studentName} · {review.areaName}
             </b>
             <span>
-              {review.areaName} · 제출{' '}
-              {new Date(review.submittedAt).toLocaleTimeString('ko-KR', {
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
+              {review.areaName} · 제출 {formatTime(review.submittedAt)}
             </span>
             <small>
               {review.reason || review.failReasons.join(' · ') || 'AI 판단을 확인해 주세요.'}
@@ -1731,14 +1722,7 @@ function Review({
               ) : (
                 <div className="evidence-picture">[학생 제출 사진]</div>
               )}
-              <small>
-                촬영{' '}
-                {new Date(item.submittedAt).toLocaleTimeString('ko-KR', {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}{' '}
-                · 앱 카메라로 촬영됨
-              </small>
+              <small>촬영 {formatTime(item.submittedAt)} · 앱 카메라로 촬영됨</small>
             </div>
             <div className="review-info-column">
               <div className="review-who">
@@ -1746,11 +1730,7 @@ function Review({
                   {item.studentName} · {item.areaName}
                 </b>
                 <small>
-                  {item.areaName} · 제출{' '}
-                  {new Date(item.submittedAt).toLocaleTimeString('ko-KR', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
+                  {item.areaName} · 제출 {formatTime(item.submittedAt)}
                 </small>
               </div>
               <div className="review-info-box">
@@ -2802,29 +2782,4 @@ function Modal({
       </dialog>
     </div>
   )
-}
-
-function exportStudentsCsv(students: StudentActivity[]) {
-  const rows = [
-    ['학생', '학번', '담당 구역', '승인 일수', '누적 활동 시간(분)'],
-    ...students.map((student) => [
-      student.name,
-      student.studentNumber ?? '',
-      student.area ?? '',
-      String(student.attendanceDays),
-      String(student.totalMinutes),
-    ]),
-  ]
-  const blob = new Blob(
-    [
-      `\uFEFF${rows.map((row) => row.map((cell) => `"${cell.replaceAll('"', '""')}"`).join(',')).join('\n')}`,
-    ],
-    { type: 'text/csv;charset=utf-8' },
-  )
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = 'ecoguard-student-activities.csv'
-  link.click()
-  URL.revokeObjectURL(url)
 }
