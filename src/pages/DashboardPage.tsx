@@ -3,7 +3,7 @@ import { api } from '../api'
 import type { Appeal, Area, ReviewItem, StudentMonth, WeeklyService } from '../types'
 import { Card, CardTitle } from '../components/Card'
 import type { Page } from '../constants/navigation'
-import { STATUS_LABELS } from '../constants/status'
+import { STATUS_CLASS_NAMES, STATUS_LABELS } from '../constants/status'
 import type { TodayStatus } from '../constants/status'
 import { formatTime, getMonday, toDateKey } from '../lib/date'
 
@@ -290,7 +290,7 @@ export function Dashboard({
                       <td>{student.area}</td>
                       <td>{submittedAt}</td>
                       <td>
-                        <span className={`status status-${STATUS_LABELS[student.status]}`}>
+                        <span className={`status status-${STATUS_CLASS_NAMES[student.status]}`}>
                           {STATUS_LABELS[student.status]}
                         </span>
                       </td>
