@@ -221,6 +221,7 @@ export function AssignmentForm({
   searchError,
   onRetrySearch,
   onSubmit,
+  onCancel,
 }: {
   areas: Area[]
   selectedArea?: Area
@@ -229,6 +230,7 @@ export function AssignmentForm({
   searchError: string
   onRetrySearch: () => void
   onSubmit: (event: React.FormEvent<HTMLFormElement>, studentIds: number[]) => void
+  onCancel: () => void
 }) {
   const [keyword, setKeyword] = useState('')
   const [selectedStudentIds, setSelectedStudentIds] = useState<number[]>([])
@@ -301,11 +303,7 @@ export function AssignmentForm({
         {searchStatus === 'ready' && !matches.length && <small>학생 검색 결과가 없습니다.</small>}
       </div>
       <div className="modal-actions">
-        <button
-          type="button"
-          className="button secondary"
-          onClick={() => window.dispatchEvent(new Event('close-modal'))}
-        >
+        <button type="button" className="button secondary" onClick={onCancel}>
           취소
         </button>
         <button className="button primary">배정하기</button>

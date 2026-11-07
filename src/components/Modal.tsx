@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useRef } from 'react'
 import type { ReactNode } from 'react'
 
 export function Modal({
@@ -8,7 +8,7 @@ export function Modal({
   isSaving = false,
 }: {
   title: string
-  children: ReactNode
+  children: ReactNode | ((props: { onRequestClose: () => void }) => ReactNode)
   onClose: () => void
   isSaving?: boolean
 }) {
@@ -34,10 +34,12 @@ export function Modal({
       return
     onClose()
   }, [isSaving, onClose])
-  useEffect(() => {
-    window.addEventListener('close-modal', requestClose)
-    return () => window.removeEventListener('close-modal', requestClose)
-  }, [requestClose])
+  const content =
+    typeof children === 'function' ? (
+      <ModalContent render={children} onRequestClose={requestClose} />
+    ) : (
+      children
+    )
   return (
     <div
       className="modal-backdrop"
@@ -60,8 +62,19 @@ export function Modal({
             ×
           </button>
         </div>
-        {children}
+        {content}
       </dialog>
     </div>
   )
+}
+
+function ModalContent({
+  render,
+  onRequestClose,
+}: {
+  render: (props: { onRequestClose: () => void }) => ReactNode
+  onRequestClose: () => void
+}) {
+  const Render = render
+  return <Render onRequestClose={onRequestClose} />
 }

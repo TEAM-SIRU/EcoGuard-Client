@@ -829,38 +829,45 @@ export default function App() {
           onClose={() => setModal(null)}
           isSaving={loading}
         >
-          {modal === 'recruit' ? (
-            <RecruitmentForm initial={editingRecruitment} onSubmit={saveRecruitment} />
-          ) : modal === 'assign' ? (
-            <AssignmentForm
-              areas={areas}
-              selectedArea={data.assignmentArea as Area | undefined}
-              students={assignmentStudents}
-              searchStatus={assignmentStudentsStatus}
-              searchError={assignmentStudentsError}
-              onRetrySearch={retryAssignmentStudents}
-              onSubmit={assignStudents}
-            />
-          ) : (
-            <form onSubmit={saveNotice}>
-              <label>
-                제목
-                <input name="title" required />
-              </label>
-              <label>
-                내용
-                <textarea name="content" rows={7} required />
-              </label>
-              <div className="modal-actions">
-                <button className="button secondary" type="button" onClick={() => setModal(null)}>
-                  취소
-                </button>
-                <button className="button primary" disabled={loading}>
-                  저장하고 올리기
-                </button>
-              </div>
-            </form>
-          )}
+          {({ onRequestClose }) =>
+            modal === 'recruit' ? (
+              <RecruitmentForm
+                initial={editingRecruitment}
+                onSubmit={saveRecruitment}
+                onCancel={onRequestClose}
+              />
+            ) : modal === 'assign' ? (
+              <AssignmentForm
+                areas={areas}
+                selectedArea={data.assignmentArea as Area | undefined}
+                students={assignmentStudents}
+                searchStatus={assignmentStudentsStatus}
+                searchError={assignmentStudentsError}
+                onRetrySearch={retryAssignmentStudents}
+                onSubmit={assignStudents}
+                onCancel={onRequestClose}
+              />
+            ) : (
+              <form onSubmit={saveNotice}>
+                <label>
+                  제목
+                  <input name="title" required />
+                </label>
+                <label>
+                  내용
+                  <textarea name="content" rows={7} required />
+                </label>
+                <div className="modal-actions">
+                  <button className="button secondary" type="button" onClick={onRequestClose}>
+                    취소
+                  </button>
+                  <button className="button primary" disabled={loading}>
+                    저장하고 올리기
+                  </button>
+                </div>
+              </form>
+            )
+          }
         </Modal>
       )}
       {logoutConfirm && (
