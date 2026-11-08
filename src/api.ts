@@ -176,6 +176,7 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(body),
     }),
+  deleteRecruitment: (id: number) => request<void>(`/recruitments/${id}`, { method: 'DELETE' }),
   areas: async () => {
     return request<Area[]>('/cleaning-areas')
   },

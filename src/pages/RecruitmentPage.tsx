@@ -2,16 +2,22 @@ import { useState } from 'react'
 import type { Applicant, Recruitment } from '../types'
 import { Card, CardTitle } from '../components/Card'
 import { Empty } from '../components/Empty'
+import { Modal } from '../components/Modal'
 
 export function Recruitment({
   items,
   onApplicants,
   onEdit,
+  onDelete,
 }: {
   items: Recruitment[]
   onApplicants: (item: Recruitment) => void
   onEdit: (item: Recruitment) => void
+  onDelete: (id: number) => Promise<void>
 }) {
+  const [confirmingDelete, setConfirmingDelete] = useState<Recruitment | null>(null)
+  const [deleting, setDeleting] = useState(false)
+
   return (
     <>
       <div className="callout wide-callout recruitment-callout">
@@ -27,6 +33,7 @@ export function Recruitment({
           <span>모집 기간</span>
           <span>모집 인원</span>
           <span>신청자</span>
+          <span>관리</span>
         </div>
         {items.map((item) => (
           <div className="recruitment-row" key={item.recruitmentId}>
@@ -43,12 +50,71 @@ export function Recruitment({
             <button className="text-button" onClick={() => onApplicants(item)}>
               {item.applicantCount}명 · 신청자 관리 ›
             </button>
+            <button
+              className="button notice-delete-button recruitment-delete-button"
+              type="button"
+              onClick={() => setConfirmingDelete(item)}
+              aria-label={`${item.semester} ${item.grade}학년 ${item.classNo}반 모집 공고 삭제`}
+            >
+              삭제
+            </button>
           </div>
         ))}
         {!items.length && (
           <Empty title="등록된 모집 공고가 없어요" detail="새 모집 공고를 등록해 주세요." />
         )}
       </Card>
+      {confirmingDelete && (
+        <Modal
+          title="정말 삭제하시겠어요?"
+          onClose={() => {
+            if (!deleting) setConfirmingDelete(null)
+          }}
+          isSaving={deleting}
+        >
+          <div className="notice-delete-dialog">
+            <div className="notice-delete-warning">
+              <span className="notice-delete-icon" aria-hidden="true">
+                !
+              </span>
+              <p>삭제한 모집 공고는 복구할 수 없어요.</p>
+            </div>
+            <div className="notice-delete-name">
+              삭제 대상: {confirmingDelete.semester} · {confirmingDelete.grade}학년{' '}
+              {confirmingDelete.classNo}반
+            </div>
+            <div className="modal-actions">
+              <button
+                className="button secondary"
+                type="button"
+                onClick={() => setConfirmingDelete(null)}
+                disabled={deleting}
+              >
+                취소
+              </button>
+              <button
+                className="button notice-delete-button"
+                type="button"
+                onClick={async () => {
+                  if (!confirmingDelete) return
+                  setDeleting(true)
+                  try {
+                    await onDelete(confirmingDelete.recruitmentId)
+                    setConfirmingDelete(null)
+                  } catch {
+                    // Keep the confirmation open when the delete request fails.
+                  } finally {
+                    setDeleting(false)
+                  }
+                }}
+                disabled={deleting}
+              >
+                {deleting ? '삭제 중…' : '삭제하기'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </>
   )
 }
