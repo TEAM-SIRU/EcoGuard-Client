@@ -386,6 +386,28 @@ export default function App() {
       }
     })
   }
+  async function deleteRecruitment(id: number) {
+    await runOnce(`recruitment:delete:${id}`, async () => {
+      setLoading(true)
+      setError('')
+      try {
+        await api.deleteRecruitment(id)
+        setData((current) => ({
+          ...current,
+          recruitments: ((current.recruitments as RecruitmentRecord[] | undefined) ?? []).filter(
+            (item) => item.recruitmentId !== id,
+          ),
+        }))
+        toast.success('모집 공고를 삭제했어요.')
+        reload()
+      } catch (e) {
+        setError(errorMessage(e))
+        throw e
+      } finally {
+        setLoading(false)
+      }
+    })
+  }
   async function toggleArea(area: Area) {
     await runOnce(`area:${area.areaId}:toggle`, async () => {
       setLoading(true)
@@ -680,6 +702,7 @@ export default function App() {
               <Recruitment
                 items={recruitments}
                 onApplicants={openApplicants}
+                onDelete={deleteRecruitment}
                 onEdit={(item) => {
                   setEditingRecruitment(item)
                   setModal('recruit')
