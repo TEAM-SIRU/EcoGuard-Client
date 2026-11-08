@@ -3,6 +3,8 @@ export const ERROR_MESSAGES: Record<string, string> = {
   INVALID_PERIOD: '모집 기간을 확인해 주세요.',
   INVALID_MAX_COUNT: '모집 인원은 반별 최대 6명이에요.',
   RECRUITMENT_CLOSED: '모집이 종료되어 수정할 수 없어요.',
+  RECRUITMENT_NOT_FOUND: '모집 공고를 찾을 수 없어요. 목록을 새로고침해 주세요.',
+  RECRUITMENT_HAS_APPLICANTS: '지원자가 있는 모집 공고는 삭제할 수 없어요.',
   MAX_COUNT_BELOW_APPLICANTS: '현재 신청자 수보다 적게 정원을 설정할 수 없어요.',
   INACTIVE_AREA: '비활성 구역에는 학생을 배정할 수 없어요.',
   ZONE_MODEL_NOT_READY: 'AI 검수가 준비되지 않은 구역은 활성화할 수 없어요.',

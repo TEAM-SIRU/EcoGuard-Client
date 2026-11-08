@@ -3468,10 +3468,13 @@ td small {
 .recruitment-columns,
 .recruitment-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr) minmax(0, 1.5fr) minmax(0, 1fr) minmax(
-      0,
-      1fr
-    );
+  grid-template-columns:
+    minmax(0, 0.9fr)
+    minmax(0, 1fr)
+    minmax(0, 1.45fr)
+    minmax(0, 0.9fr)
+    minmax(0, 1.2fr)
+    64px;
   align-items: center;
 }
 .recruitment-columns {
@@ -3502,6 +3505,12 @@ td small {
   font-size: 12px;
   padding: 3px;
   white-space: nowrap;
+}
+.recruitment-delete-button {
+  min-height: 34px;
+  justify-self: start;
+  padding: 6px 10px;
+  font-size: 12px;
 }
 .applicant-filter {
   height: 86px;
@@ -4915,7 +4924,7 @@ td small {
   }
   .app-shell .recruitment-columns,
   .app-shell .recruitment-row {
-    min-width: 680px;
+    min-width: 760px;
   }
   .app-shell .applicant-columns,
   .app-shell .applicant-row {
